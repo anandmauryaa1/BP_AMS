@@ -1,0 +1,219 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   DESIGN TOKENS — Light Mode (default)
+   ============================================================ */
+:root {
+  color-scheme: light;
+
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --border: #e2e8f0;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --input-bg: #ffffff;
+  --input-border: #cbd5e1;
+  --input-text: #0f172a;
+  --input-placeholder: #94a3b8;
+  --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+}
+
+/* ============================================================
+   DESIGN TOKENS — Dark Mode
+   ============================================================ */
+.dark {
+  color-scheme: dark;
+
+  --background: #09090b;
+  --foreground: #f8fafc;
+  --card: #18181b;
+  --card-foreground: #f8fafc;
+  --border: #27272a;
+  --muted: #27272a;
+  --muted-foreground: #a1a1aa;
+  --input-bg: #1c1c1f;
+  --input-border: #3f3f46;
+  --input-text: #f8fafc;
+  --input-placeholder: #71717a;
+  --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+}
+
+/* ============================================================
+   BASE BODY
+   ============================================================ */
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+/* ============================================================
+   FORM ELEMENTS — Full dark/light theme
+   Fixes the white select box bug in dark mode
+   ============================================================ */
+
+/* --- Base: Light mode form elements --- */
+input,
+textarea,
+select {
+  background-color: var(--input-bg);
+  color: var(--input-text);
+  border-color: var(--input-border);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--input-placeholder);
+}
+
+/* Select (single): remove OS arrow, add custom SVG chevron */
+select:not([multiple]) {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: var(--select-arrow);
+  background-repeat: no-repeat;
+  background-position: right 0.65rem center;
+  background-size: 14px;
+  padding-right: 2rem !important;
+}
+
+/* Multi-select: keep native listbox, just theme the colors */
+select[multiple] {
+  appearance: auto;
+  -webkit-appearance: auto;
+  background-image: none !important;
+  padding-right: 0.75rem !important;
+}
+
+/* Date / time / number — tell browser to use light color scheme */
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"],
+input[type="month"],
+input[type="week"] {
+  color-scheme: light;
+}
+
+/* ============================================================
+   DARK MODE — Force dark backgrounds on ALL form elements
+   These rules use !important to beat Tailwind utility classes
+   like bg-background, bg-card that may be on the element.
+   ============================================================ */
+.dark input,
+.dark textarea,
+.dark select {
+  background-color: #1c1c1f !important;
+  color: #f4f4f5 !important;
+  border-color: #3f3f46 !important;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #71717a !important;
+}
+
+/* Dark select: swap chevron arrow to light color */
+.dark select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+}
+
+/* Dark option elements */
+.dark select option {
+  background-color: #1c1c1f;
+  color: #f4f4f5;
+}
+
+/* Date pickers: tell browser to use dark color scheme in dark mode */
+.dark input[type="date"],
+.dark input[type="time"],
+.dark input[type="datetime-local"],
+.dark input[type="month"],
+.dark input[type="week"] {
+  color-scheme: dark;
+}
+
+/* Calendar icon: invert to white in dark mode */
+.dark input[type="date"]::-webkit-calendar-picker-indicator,
+.dark input[type="time"]::-webkit-calendar-picker-indicator,
+.dark input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(0.75);
+  cursor: pointer;
+}
+
+/* ============================================================
+   SCROLLBAR
+   ============================================================ */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* ============================================================
+   FOCUS RINGS
+   ============================================================ */
+input:focus,
+button:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+}
+
+/* ============================================================
+   UTILITY OVERRIDES
+   Map Tailwind-style class names → CSS vars (theme-aware)
+   ============================================================ */
+.bg-background { background-color: var(--background); }
+.bg-card       { background-color: var(--card); }
+.text-foreground      { color: var(--foreground); }
+.text-card-foreground { color: var(--card-foreground); }
+.border-border { border-color: var(--border); }
+.bg-muted      { background-color: var(--muted); }
+.text-muted-foreground { color: var(--muted-foreground); }
+
+/* ============================================================
+   MOBILE VIEWPORT & SAFE AREA INSETS (iOS & Android)
+   ============================================================ */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.mb-safe {
+  margin-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Ensure mobile tap targets feel instant with no tap highlight flicker */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Smooth mobile scrolling */
+html {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+

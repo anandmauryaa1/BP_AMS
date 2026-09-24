@@ -1,0 +1,38 @@
+﻿# Dependencies
+node_modules/
+*/node_modules/
+
+# Next.js and Build Outputs
+.next/
+*/.next/
+dist/
+*/dist/
+out/
+*/out/
+
+# Environment Variables
+.env
+.env.*
+*/.env
+*/.env.*
+!.env.example
+!*/.env.example
+
+# Logs & Testing
+*.log
+coverage/
+*/coverage/
+playwright-report/
+*/playwright-report/
+test-results/
+*/test-results/
+
+# TypeScript Build Info
+*.tsbuildinfo
+*/tsconfig.tsbuildinfo
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
