@@ -32,7 +32,7 @@ async function cleanProduction() {
   console.log('Connected to MongoDB database:', mongoose.connection.name);
 
   // 1. Wipe all transactional, operational, mock, and test collections
-  const collectionsToWipe = [
+  const collectionsToWipe: { name: string; model: mongoose.Model<any> }[] = [
     { name: 'Attendances', model: Attendance },
     { name: 'WorkSessions', model: WorkSession },
     { name: 'Tasks', model: Task },
