@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { connectToDatabase } from '../db.js';
 import { LeaveRequest } from '../models/LeaveRequest.js';
 import { authenticateToken, requireManagerOrAdmin } from '../middleware/auth.js';
+import { notifyLeaveApplication, notifyLeaveDecision } from '../services/pushNotification.js';
 
 const router = Router();
 
@@ -43,6 +44,15 @@ router.post('/', async (req: Request, res: Response) => {
       status: 'PENDING',
     });
 
+    try {
+      await notifyLeaveApplication({
+        leave,
+        employeeName: req.user?.name || 'Staff Member',
+      });
+    } catch (pushErr) {
+      console.warn('[PushNotification:Leave] Non-fatal notification error:', pushErr);
+    }
+
     return res.status(201).json({
       success: true,
       message: 'Leave application submitted successfully. Your reporting manager has been notified.',
@@ -76,6 +86,15 @@ router.put('/:id', requireManagerOrAdmin, async (req: Request, res: Response) =>
 
     if (!updated) {
       return res.status(404).json({ success: false, error: 'Leave request not found' });
+    }
+
+    try {
+      await notifyLeaveDecision({
+        leave: updated,
+        reviewerName: req.user?.name,
+      });
+    } catch (pushErr) {
+      console.warn('[PushNotification:LeaveDecision] Non-fatal notification error:', pushErr);
     }
 
     return res.json({

@@ -3,6 +3,12 @@ import { connectToDatabase } from '../db.js';
 import { Task } from '../models/Task.js';
 import { authenticateToken, requireManagerOrAdmin } from '../middleware/auth.js';
 import { recordTaskEvent, recordReviewEvent } from '../services/events.js';
+import {
+  notifyTaskScheduled,
+  notifyTaskStatusUpdate,
+  notifyTaskRescheduled,
+  notifyTaskReassigned,
+} from '../services/pushNotification.js';
 
 const router = Router();
 
@@ -61,7 +67,21 @@ router.post('/', requireManagerOrAdmin, async (req: Request, res: Response) => {
       });
     }
 
-    return res.status(201).json({ success: true, data: task });
+    // Trigger instant Web Push notification to assigned employee and managers
+    try {
+      await notifyTaskScheduled({
+        task,
+        creatorName: req.user?.name,
+      });
+    } catch (pushErr) {
+      console.warn('[PushNotification:Task] Non-fatal notification error:', pushErr);
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: 'Task scheduled successfully. Assigned staff and managers have been notified.',
+      data: task,
+    });
   } catch (error: any) {
     console.error('[API:Tasks:POST] Error:', error);
     return res.status(500).json({ success: false, error: error.message || 'Failed to create task' });
@@ -154,7 +174,55 @@ router.put('/:id', async (req: Request, res: Response) => {
       }
     }
 
-    return res.json({ success: true, data: updatedTask });
+    if (updates.status) {
+      try {
+        await notifyTaskStatusUpdate({
+          task: updatedTask,
+          updatedBy: req.user,
+          status: updates.status,
+          notes: updates.reviewNotes,
+        });
+      } catch (pushErr) {
+        console.warn('[PushNotification:TaskUpdate] Non-fatal notification error:', pushErr);
+      }
+    }
+
+    // Trigger notification if task was reassigned to a different staff member
+    if (updates.assignedTo && String(updates.assignedTo) !== String(oldTask.assignedTo)) {
+      try {
+        await notifyTaskReassigned({
+          task: updatedTask,
+          newAssigneeId: String(updates.assignedTo),
+          previousAssigneeId: oldTask.assignedTo ? String(oldTask.assignedTo) : undefined,
+          reassignedBy: req.user,
+        });
+      } catch (pushErr) {
+        console.warn('[PushNotification:TaskReassign] Non-fatal notification error:', pushErr);
+      }
+    }
+
+    // Trigger notification if due date was rescheduled
+    if (
+      updates.dueDate &&
+      (!oldTask.dueDate || new Date(updates.dueDate).getTime() !== new Date(oldTask.dueDate).getTime())
+    ) {
+      try {
+        await notifyTaskRescheduled({
+          task: updatedTask,
+          rescheduledBy: req.user,
+          oldDueDate: oldTask.dueDate,
+          newDueDate: updates.dueDate,
+        });
+      } catch (pushErr) {
+        console.warn('[PushNotification:TaskReschedule] Non-fatal notification error:', pushErr);
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: 'Task updated successfully and notifications dispatched.',
+      data: updatedTask,
+    });
   } catch (error: any) {
     console.error('[API:Tasks:PUT] Error:', error);
     return res.status(500).json({ success: false, error: 'Failed to update task' });

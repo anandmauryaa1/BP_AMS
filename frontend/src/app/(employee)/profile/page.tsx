@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { User, Mail, Building2, Shield, Lock, Calendar, Key } from 'lucide-react';
 import { SessionPayload } from '@/types';
 import { formatDate } from '@/lib/utils';
+import { PushNotificationManager } from '@/components/PushNotificationManager';
 
 export default function EmployeeProfilePage() {
   const [user, setUser] = useState<any>(null);
@@ -159,6 +160,9 @@ export default function EmployeeProfilePage() {
                 </Link>
               </div>
             </Card>
+
+            {/* Web Push Notifications Card */}
+            <PushNotificationManager variant="full" />
           </div>
         )}
       </main>

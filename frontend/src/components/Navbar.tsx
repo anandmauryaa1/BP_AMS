@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { SessionPayload } from '@/types';
 import { Badge } from '@/components/ui/Badge';
+import { PushNotificationManager } from '@/components/PushNotificationManager';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { cn } from '@/lib/utils';
 
@@ -291,6 +292,9 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
                         <div className="p-2 font-bold text-slate-800 dark:text-slate-200 flex items-center justify-between">
                           <span>Notifications</span>
                           <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">Recent 10</span>
+                        </div>
+                        <div className="p-2">
+                          <PushNotificationManager variant="compact" />
                         </div>
                         <div className="max-h-64 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
                           {notifications.length === 0 ? (

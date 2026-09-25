@@ -3,6 +3,7 @@ import { connectToDatabase } from '../db.js';
 import { Plan } from '../models/Plan.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { getTodayDateString } from '../utils/index.js';
+import { notifyDailyPlanSubmitted } from '../services/pushNotification.js';
 
 const router = Router();
 
@@ -38,7 +39,22 @@ router.post('/daily', async (req: Request, res: Response) => {
       { upsert: true, new: true }
     );
 
-    return res.json({ success: true, data: plan });
+    // Notify managers of daily production schedule submission
+    try {
+      await notifyDailyPlanSubmitted({
+        employeeName: req.user?.name || 'Staff Member',
+        date,
+        plannedTasksCount: (req.body.tasks || []).length,
+      });
+    } catch (pushErr) {
+      console.warn('[PushNotification:Plan] Non-fatal notification error:', pushErr);
+    }
+
+    return res.json({
+      success: true,
+      message: 'Daily production plan recorded and managers notified.',
+      data: plan,
+    });
   } catch (error: any) {
     console.error('[API:Plans:POST] Error:', error);
     return res.status(500).json({ success: false, error: 'Failed to save daily plan' });
@@ -57,7 +73,21 @@ router.put('/daily', async (req: Request, res: Response) => {
       { new: true }
     );
 
-    return res.json({ success: true, data: plan });
+    try {
+      await notifyDailyPlanSubmitted({
+        employeeName: req.user?.name || 'Staff Member',
+        date,
+        plannedTasksCount: (req.body.tasks || []).length,
+      });
+    } catch (pushErr) {
+      console.warn('[PushNotification:PlanUpdate] Non-fatal notification error:', pushErr);
+    }
+
+    return res.json({
+      success: true,
+      message: 'Daily production plan updated and managers notified.',
+      data: plan,
+    });
   } catch (error: any) {
     console.error('[API:Plans:PUT] Error:', error);
     return res.status(500).json({ success: false, error: 'Failed to update plan' });

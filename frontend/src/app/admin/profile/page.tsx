@@ -22,6 +22,7 @@ import {
   AlertCircle,
   Clock,
 } from 'lucide-react';
+import { PushNotificationManager } from '@/components/PushNotificationManager';
 
 export default function AdminProfilePage() {
   const [user, setUser] = useState<any>(null);
@@ -287,6 +288,9 @@ export default function AdminProfilePage() {
                 </div>
               </form>
             </Card>
+
+            {/* Web Push Notifications Management Card */}
+            <PushNotificationManager variant="full" />
           </div>
         )}
       </main>
