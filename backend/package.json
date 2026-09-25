@@ -5,9 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "dev:backend": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
     "seed": "tsx src/scripts/seed.ts",
+    "clean:prod": "tsx src/scripts/clean-production.ts",
+    "seed:prod": "tsx src/scripts/clean-production.ts",
     "test": "vitest run"
   },
   "dependencies": {

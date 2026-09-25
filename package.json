@@ -14,6 +14,7 @@
     "build:frontend": "npm run build --prefix frontend",
     "build:backend": "npm run build --prefix backend",
     "test:frontend": "npm run test --prefix frontend",
-    "test:backend": "npm run test --prefix backend"
+    "test:backend": "npm run test --prefix backend",
+    "clean:prod": "npm run clean:prod --prefix backend"
   }
 }

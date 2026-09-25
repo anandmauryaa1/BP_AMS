@@ -44,23 +44,26 @@ async function seed() {
     console.log(`Admin updated: username "${adminUsername}", password "${adminPassword}"`);
   }
 
-  const empExists = await User.findOne({ username: 'john' });
-  if (!empExists) {
-    console.log('Creating Sample Employee...');
-    const passwordHash = await hashPassword('password123');
-    await User.create({
-      employeeId: 'EMP-101',
-      username: 'john',
-      passwordHash,
-      name: 'John Doe',
-      email: 'john.doe@company.com',
-      department: 'Production',
-      designation: 'Video Editor',
-      role: 'EMPLOYEE',
-      status: 'ACTIVE',
-      mustChangePassword: false,
-    });
-    console.log('Sample Employee created: username "john", password "password123"');
+  const shouldSeedSample = process.env.NODE_ENV !== 'production' && process.env.INCLUDE_SAMPLE_DATA === 'true';
+  if (shouldSeedSample) {
+    const empExists = await User.findOne({ username: 'john' });
+    if (!empExists) {
+      console.log('Creating Sample Employee...');
+      const passwordHash = await hashPassword('password123');
+      await User.create({
+        employeeId: 'EMP-101',
+        username: 'john',
+        passwordHash,
+        name: 'John Doe',
+        email: 'john.doe@company.com',
+        department: 'Production',
+        designation: 'Video Editor',
+        role: 'EMPLOYEE',
+        status: 'ACTIVE',
+        mustChangePassword: false,
+      });
+      console.log('Sample Employee created: username "john", password "password123"');
+    }
   }
 
   console.log('Seeding complete.');

@@ -4,14 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:frontend": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
-    "test": "vitest run",
-    "seed": "tsx scripts/seed.ts",
-    "seed:admin": "node --loader ts-node/esm scripts/seed-admin.js || node scripts/seed-admin.js",
-    "seed:prod": "tsx scripts/seed-production.ts"
+    "test": "vitest run"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.0.2",
