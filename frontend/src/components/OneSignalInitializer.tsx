@@ -16,8 +16,9 @@ export function OneSignalInitializer() {
         const res = await fetch('/api/auth/me');
         if (res.ok) {
           const data = await res.json();
-          if (data.success && data.user) {
-            const externalId = data.user.employeeId || data.user.id || data.user._id;
+          const user = data.data?.user || data.data || data.user;
+          if (data.success && user) {
+            const externalId = user.employeeId || user.userId || user.id || user._id;
             if (externalId) {
               loginToOneSignal(String(externalId));
             }
