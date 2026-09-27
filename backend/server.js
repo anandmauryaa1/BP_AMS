@@ -47,13 +47,34 @@ const globalRateLimiter = rateLimit({
     validate: { xForwardedForHeader: false },
 });
 app.use('/api', globalRateLimiter);
+const allowedOrigins = [CLIENT_URL, 'http://localhost:3000', 'http://127.0.0.1:3000'].filter(Boolean);
 app.use(cors({
-    origin: [CLIENT_URL, 'http://localhost:3000', 'http://127.0.0.1:3000'],
+    origin: (origin, callback) => {
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+            return callback(null, true);
+        }
+        return callback(null, true);
+    },
     credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+
+// Database connection middleware for Serverless & traditional environments
+app.use(async (req, res, next) => {
+    try {
+        await connectToDatabase();
+        next();
+    } catch (err) {
+        console.error('[Database Middleware Error]:', err);
+        res.status(500).json({
+            success: false,
+            error: 'Database connection failed. Please ensure MONGODB_URI is configured.',
+        });
+    }
+});
 // Apply rate limiting specifically to sensitive auth routes
 app.use('/api/auth/login', authRateLimiter);
 app.use('/api/auth/forgot-password', authRateLimiter);
@@ -133,6 +154,9 @@ function gracefulShutdown(signal) {
         process.exit(0);
     }
 }
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-startServer();
+// Only listen directly when running in non-serverless environments (local dev, VPS, Docker)
+if (process.env.VERCEL !== '1' && !process.env.NOW_REGION) {
+    startServer();
+}
+
+export default app;
