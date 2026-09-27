@@ -74,6 +74,11 @@ export default function AdminEmployeesPage() {
   const [sendResetEmail, setSendResetEmail] = useState(true);
   const [isSubmittingReset, setIsSubmittingReset] = useState(false);
 
+  // Modal error states
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [resetError, setResetError] = useState<string | null>(null);
+
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
     setToastMessage({ text, type });
     setTimeout(() => setToastMessage(null), 4000);
@@ -123,11 +128,13 @@ export default function AdminEmployeesPage() {
       initialPassword: generateRandomPassword(),
       sendWelcomeEmail: true,
     });
+    setCreateError(null);
     setIsCreateOpen(true);
   };
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setCreateError(null);
     setIsSubmittingCreate(true);
 
     try {
@@ -139,7 +146,9 @@ export default function AdminEmployeesPage() {
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        showToast(data.message || 'Failed to create employee', 'error');
+        const errMsg = data.error || data.message || 'Failed to create employee';
+        setCreateError(errMsg);
+        showToast(errMsg, 'error');
         setIsSubmittingCreate(false);
         return;
       }
@@ -148,7 +157,9 @@ export default function AdminEmployeesPage() {
       setIsCreateOpen(false);
       fetchEmployees();
     } catch {
-      showToast('Network error during employee creation', 'error');
+      const errMsg = 'Network error during employee creation';
+      setCreateError(errMsg);
+      showToast(errMsg, 'error');
     } finally {
       setIsSubmittingCreate(false);
     }
@@ -156,6 +167,7 @@ export default function AdminEmployeesPage() {
 
   const openEditModal = (emp: any) => {
     setEditingEmployee(emp);
+    setEditError(null);
     setEditForm({
       name: emp.name,
       email: emp.email,
@@ -170,6 +182,7 @@ export default function AdminEmployeesPage() {
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingEmployee) return;
+    setEditError(null);
     setIsSubmittingEdit(true);
 
     try {
@@ -181,7 +194,9 @@ export default function AdminEmployeesPage() {
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        showToast(data.message || 'Failed to update employee', 'error');
+        const errMsg = data.error || data.message || 'Failed to update employee';
+        setEditError(errMsg);
+        showToast(errMsg, 'error');
         setIsSubmittingEdit(false);
         return;
       }
@@ -190,7 +205,9 @@ export default function AdminEmployeesPage() {
       setEditingEmployee(null);
       fetchEmployees();
     } catch {
-      showToast('Network error updating employee', 'error');
+      const errMsg = 'Network error updating employee';
+      setEditError(errMsg);
+      showToast(errMsg, 'error');
     } finally {
       setIsSubmittingEdit(false);
     }
@@ -198,6 +215,7 @@ export default function AdminEmployeesPage() {
 
   const openResetModal = (emp: IUser) => {
     setResettingEmployee(emp);
+    setResetError(null);
     setTempPassword(generateRandomPassword());
     setSendResetEmail(true);
   };
@@ -205,6 +223,7 @@ export default function AdminEmployeesPage() {
   const handleResetSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!resettingEmployee) return;
+    setResetError(null);
     setIsSubmittingReset(true);
 
     try {
@@ -219,7 +238,9 @@ export default function AdminEmployeesPage() {
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        showToast(data.message || 'Failed to reset password', 'error');
+        const errMsg = data.error || data.message || 'Failed to reset password';
+        setResetError(errMsg);
+        showToast(errMsg, 'error');
         setIsSubmittingReset(false);
         return;
       }
@@ -227,7 +248,9 @@ export default function AdminEmployeesPage() {
       showToast('Password reset successfully. Employee must change password upon next login.', 'success');
       setResettingEmployee(null);
     } catch {
-      showToast('Network error resetting password', 'error');
+      const errMsg = 'Network error resetting password';
+      setResetError(errMsg);
+      showToast(errMsg, 'error');
     } finally {
       setIsSubmittingReset(false);
     }
@@ -245,7 +268,8 @@ export default function AdminEmployeesPage() {
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        showToast(data.message || 'Failed to delete employee', 'error');
+        const errMsg = data.error || data.message || 'Failed to delete employee';
+        showToast(errMsg, 'error');
         setIsSubmittingDelete(false);
         return;
       }
@@ -279,16 +303,16 @@ export default function AdminEmployeesPage() {
         {/* Toast Alert */}
         {toastMessage && (
           <div
-            className={`fixed top-20 right-4 z-50 p-4 rounded-xl shadow-lg border text-xs font-semibold flex items-center gap-2 animate-in slide-in-from-top-3 ${
+            className={`fixed top-20 right-4 z-[9999] p-4 rounded-xl shadow-2xl border text-sm font-semibold flex items-center gap-2.5 animate-in slide-in-from-top-3 ${
               toastMessage.type === 'success'
-                ? 'bg-emerald-900 text-white border-emerald-700'
-                : 'bg-rose-900 text-white border-rose-700'
+                ? 'bg-emerald-600 text-white border-emerald-500 shadow-emerald-950/40'
+                : 'bg-rose-600 text-white border-rose-500 shadow-rose-950/40'
             }`}
           >
             {toastMessage.type === 'success' ? (
-              <CheckCircle className="w-4 h-4 text-emerald-400" />
+              <CheckCircle className="w-5 h-5 text-white shrink-0" />
             ) : (
-              <AlertCircle className="w-4 h-4 text-rose-400" />
+              <AlertCircle className="w-5 h-5 text-white shrink-0" />
             )}
             <span>{toastMessage.text}</span>
           </div>
@@ -504,6 +528,12 @@ export default function AdminEmployeesPage() {
           description="Provision a new team member account with temporary access credentials."
         >
           <form onSubmit={handleCreateSubmit} className="space-y-4">
+            {createError && (
+              <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs font-medium flex items-center gap-2 animate-in fade-in">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+                <span>{createError}</span>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <Input
                 label="Employee ID *"
@@ -656,6 +686,12 @@ export default function AdminEmployeesPage() {
         >
           {editingEmployee && (
             <form onSubmit={handleEditSubmit} className="space-y-4">
+              {editError && (
+                <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs font-medium flex items-center gap-2 animate-in fade-in">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+                  <span>{editError}</span>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <Input
                   label="Employee ID (Immutable)"
@@ -773,6 +809,12 @@ export default function AdminEmployeesPage() {
         >
           {resettingEmployee && (
             <form onSubmit={handleResetSubmit} className="space-y-4">
+              {resetError && (
+                <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs font-medium flex items-center gap-2 animate-in fade-in">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+                  <span>{resetError}</span>
+                </div>
+              )}
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide">

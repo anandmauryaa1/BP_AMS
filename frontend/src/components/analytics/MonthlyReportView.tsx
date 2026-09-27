@@ -51,13 +51,25 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
       if (force) queryParams.set('forceRegenerate', 'true');
 
       const res = await fetch(`/api/analytics/reports/monthly?${queryParams.toString()}`);
-      const data = await res.json();
-
-      if (!res.ok || !data.success) {
-        throw new Error(data.message || 'Failed to load monthly report');
+      if (!res.ok) {
+        let errMsg = `Server returned status ${res.status}`;
+        try {
+          const errData = await res.json();
+          errMsg = errData.error || errData.message || errMsg;
+        } catch {
+          if (res.status === 500 || res.status === 502 || res.status === 503) {
+            errMsg = 'Unable to reach backend service. Please ensure the backend server is running on port 5000.';
+          }
+        }
+        throw new Error(errMsg);
       }
 
-      setReport(data.data.report);
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || data.message || 'Failed to load monthly report');
+      }
+
+      setReport(data.data?.report || data.data);
     } catch (err: any) {
       setError(err.message || 'An error occurred while fetching monthly report');
     } finally {

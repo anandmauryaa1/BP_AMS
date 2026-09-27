@@ -60,7 +60,7 @@ export async function computeDeepAnalytics(filters) {
     const avgWorkingMinutes = presentDays > 0 ? Math.round(totalWorkingMins / presentDays) : 0;
     const avgBreakMinutes = presentDays > 0 ? Math.round(totalBreakMins / presentDays) : 0;
     const taskQuery = {
-        $or: [{ assignedTo: empMongoId }, { assignedTo: empCode }],
+        assignedTo: empMongoId,
         createdAt: { $lte: end },
     };
     if (filters.projectId && filters.projectId !== 'ALL')
@@ -142,7 +142,7 @@ export async function computeDeepAnalytics(filters) {
     const facebookOutput = completedDeliverables.filter((d) => d.platform === 'FACEBOOK').length;
     const projectsContributedCount = new Set(completedDeliverables.map((d) => d.projectId?.toString())).size;
     const reviewEvents = await ReviewEvent.find({
-        $or: [{ employeeId: empMongoId }, { employeeId: empCode }],
+        employeeId: empMongoId,
         timestamp: { $gte: start, $lte: end },
     })
         .populate('taskId', 'title')

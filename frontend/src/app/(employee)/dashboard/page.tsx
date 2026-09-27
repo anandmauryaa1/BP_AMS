@@ -216,18 +216,18 @@ export default function EmployeeDashboard() {
 
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-20 right-4 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+        <div className="fixed top-20 right-4 z-[9999] animate-in fade-in slide-in-from-top-2 duration-200">
           <div
-            className={`flex items-center gap-2 px-4 py-3 rounded-xl shadow-lg border text-xs font-semibold ${
+            className={`flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-2xl border text-sm font-semibold ${
               toastMessage.type === 'success'
-                ? 'bg-emerald-600 text-white border-emerald-500'
-                : 'bg-rose-600 text-white border-rose-500'
+                ? 'bg-emerald-600 text-white border-emerald-500 shadow-emerald-950/40'
+                : 'bg-rose-600 text-white border-rose-500 shadow-rose-950/40'
             }`}
           >
             {toastMessage.type === 'success' ? (
-              <CheckCircle className="w-4 h-4" />
+              <CheckCircle className="w-5 h-5 text-white shrink-0" />
             ) : (
-              <AlertCircle className="w-4 h-4" />
+              <AlertCircle className="w-5 h-5 text-white shrink-0" />
             )}
             <span>{toastMessage.text}</span>
           </div>

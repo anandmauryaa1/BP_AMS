@@ -109,7 +109,7 @@ export async function generateDailyReport(employeeId, dateStr, options) {
     }));
     const projectsWorked = timeAllocation.length;
     const assignedTasks = await Task.find({
-        $or: [{ assignedTo: empMongoId }, { assignedTo: empCode }],
+        assignedTo: empMongoId,
         createdAt: { $lte: endOfDay },
     }).lean();
     const tasksAssigned = assignedTasks.length;
@@ -139,7 +139,7 @@ export async function generateDailyReport(employeeId, dateStr, options) {
     }
     const overdue = assignedTasks.filter((t) => !['COMPLETED', 'CANCELLED'].includes(t.status) && t.dueDate && new Date(t.dueDate) < new Date()).length;
     const reviewEvents = await ReviewEvent.find({
-        $or: [{ employeeId: empMongoId }, { employeeId: empCode }],
+        employeeId: empMongoId,
         timestamp: { $gte: startOfDay, $lte: endOfDay },
     }).lean();
     const submittedForReview = reviewEvents.filter((r) => r.status === 'SUBMITTED').length;

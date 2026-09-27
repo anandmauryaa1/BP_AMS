@@ -43,18 +43,38 @@ export async function apiFetch<T = any>(
   };
 
   try {
-    const response = await fetch(url, config);
-    const data = await response.json();
+    let data: any = null;
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      try {
+        data = await response.json();
+      } catch {
+        data = null;
+      }
+    } else {
+      try {
+        const text = await response.text();
+        if (text) {
+          data = { message: text.length > 200 ? text.slice(0, 200) + '...' : text };
+        }
+      } catch {
+        data = null;
+      }
+    }
 
     if (!response.ok) {
+      const fallbackMsg =
+        response.status === 500 || response.status === 502 || response.status === 503
+          ? 'Backend service is unavailable. Please ensure the backend server is running on port 5000.'
+          : `HTTP error ${response.status}: ${response.statusText || 'Request failed'}`;
       return {
         success: false,
-        error: data?.error || data?.message || `HTTP error ${response.status}`,
+        error: data?.error || data?.message || fallbackMsg,
         message: data?.message,
       };
     }
 
-    return data;
+    return data || { success: true };
   } catch (err: any) {
     console.error(`[API Client] Fetch failed for ${url}:`, err);
     return {

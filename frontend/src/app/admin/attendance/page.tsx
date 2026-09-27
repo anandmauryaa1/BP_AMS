@@ -177,16 +177,16 @@ export default function AdminAttendancePage() {
         {/* Toast Alert */}
         {toastMessage && (
           <div
-            className={`fixed top-20 right-4 z-50 p-4 rounded-xl shadow-lg border text-xs font-semibold flex items-center gap-2 animate-in slide-in-from-top-3 ${
+            className={`fixed top-20 right-4 z-[9999] p-4 rounded-xl shadow-2xl border text-sm font-semibold flex items-center gap-2.5 animate-in slide-in-from-top-3 ${
               toastMessage.type === 'success'
-                ? 'bg-emerald-900 text-white border-emerald-700'
-                : 'bg-rose-900 text-white border-rose-700'
+                ? 'bg-emerald-600 text-white border-emerald-500 shadow-emerald-950/40'
+                : 'bg-rose-600 text-white border-rose-500 shadow-rose-950/40'
             }`}
           >
             {toastMessage.type === 'success' ? (
-              <Check className="w-4 h-4 text-emerald-400" />
+              <Check className="w-5 h-5 text-white shrink-0" />
             ) : (
-              <AlertCircle className="w-4 h-4 text-rose-400" />
+              <AlertCircle className="w-5 h-5 text-white shrink-0" />
             )}
             <span>{toastMessage.text}</span>
           </div>

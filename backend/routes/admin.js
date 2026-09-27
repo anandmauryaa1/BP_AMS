@@ -6,7 +6,7 @@ import { Attendance } from '../models/Attendance.js';
 import { AuditLog } from '../models/AuditLog.js';
 import { authenticateToken, requireManagerOrAdmin, hashPassword } from '../middleware/auth.js';
 import { logAuditEvent } from '../services/audit.js';
-import { sendWelcomeEmail } from '../services/email.js';
+import { sendWelcomeEmail, sendAdminPasswordResetEmail } from '../services/email.js';
 const router = Router();
 const CreateEmployeeSchema = z.object({
     employeeId: z.string().min(2).max(20).trim().toUpperCase(),
@@ -210,7 +210,8 @@ router.put('/employees/:id', async (req, res) => {
 router.post('/employees/:id/reset-password', async (req, res) => {
     try {
         const { id } = req.params;
-        const { newPassword } = req.body;
+        const newPassword = req.body.newPassword || req.body.temporaryPassword;
+        const sendEmailNotification = req.body.sendEmailNotification ?? true;
         if (!newPassword || newPassword.length < 8) {
             return res.status(400).json({ success: false, error: 'New password must be at least 8 characters long' });
         }
@@ -222,6 +223,15 @@ router.post('/employees/:id/reset-password', async (req, res) => {
         employee.passwordHash = await hashPassword(newPassword);
         employee.mustChangePassword = true;
         await employee.save();
+
+        if (sendEmailNotification && employee.email) {
+            sendAdminPasswordResetEmail({
+                to: employee.email,
+                name: employee.name,
+                temporaryPassword: newPassword,
+            }).catch((err) => console.error('[API:Admin] Admin reset password email failed:', err));
+        }
+
         await logAuditEvent({
             actorId: req.user.userId,
             actorName: req.user.name,

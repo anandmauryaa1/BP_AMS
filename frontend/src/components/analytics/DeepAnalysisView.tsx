@@ -48,13 +48,25 @@ export const DeepAnalysisView: React.FC<DeepAnalysisViewProps> = ({ employeeId }
       if (status !== 'ALL') queryParams.set('status', status);
 
       const res = await fetch(`/api/analytics/deep-analysis?${queryParams.toString()}`);
-      const data = await res.json();
-
-      if (!res.ok || !data.success) {
-        throw new Error(data.message || 'Failed to compute deep analysis');
+      if (!res.ok) {
+        let errMsg = `Server returned status ${res.status}`;
+        try {
+          const errData = await res.json();
+          errMsg = errData.error || errData.message || errMsg;
+        } catch {
+          if (res.status === 500 || res.status === 502 || res.status === 503) {
+            errMsg = 'Unable to reach backend service. Please ensure the backend server is running on port 5000.';
+          }
+        }
+        throw new Error(errMsg);
       }
 
-      setAnalysis(data.data.analysis);
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.message || data.error || 'Failed to compute deep analysis');
+      }
+
+      setAnalysis(data.data?.analysis || data.data);
     } catch (err: any) {
       setError(err.message || 'An error occurred while loading deep analysis');
     } finally {
