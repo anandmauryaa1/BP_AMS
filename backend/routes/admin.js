@@ -138,12 +138,19 @@ router.post('/employees', async (req, res) => {
             mustChangePassword: true,
         });
         if (shouldSendEmail) {
-            sendWelcomeEmail({
-                to: newEmployee.email,
-                name: newEmployee.name,
-                username: newEmployee.username,
-                temporaryPassword: initialPassword,
-            }).catch((err) => console.error('[API:Admin] Welcome email failed:', err));
+            try {
+                const emailResult = await sendWelcomeEmail({
+                    to: newEmployee.email,
+                    name: newEmployee.name,
+                    username: newEmployee.username,
+                    temporaryPassword: initialPassword,
+                });
+                if (!emailResult?.success) {
+                    console.warn('[API:Admin] Welcome email was not delivered:', emailResult?.error);
+                }
+            } catch (err) {
+                console.error('[API:Admin] Welcome email execution error:', err?.message);
+            }
         }
         await logAuditEvent({
             actorId: req.user.userId,
@@ -235,11 +242,18 @@ router.post('/employees/:id/reset-password', async (req, res) => {
         await employee.save();
 
         if (sendEmailNotification && employee.email) {
-            sendAdminPasswordResetEmail({
-                to: employee.email,
-                name: employee.name,
-                temporaryPassword: newPassword,
-            }).catch((err) => console.error('[API:Admin] Admin reset password email failed:', err));
+            try {
+                const emailResult = await sendAdminPasswordResetEmail({
+                    to: employee.email,
+                    name: employee.name,
+                    temporaryPassword: newPassword,
+                });
+                if (!emailResult?.success) {
+                    console.warn('[API:Admin] Admin reset password email was not delivered:', emailResult?.error);
+                }
+            } catch (err) {
+                console.error('[API:Admin] Admin reset password email execution error:', err?.message);
+            }
         }
 
         await logAuditEvent({

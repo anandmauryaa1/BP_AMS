@@ -7,7 +7,7 @@ function getTransporter() {
     const pass = process.env.SMTP_PASSWORD ? process.env.SMTP_PASSWORD.replace(/\s+/g, '') : '';
     const host = process.env.SMTP_HOST || 'smtp.gmail.com';
     const port = Number(process.env.SMTP_PORT) || 465;
-    const secure = process.env.SMTP_SECURE !== 'false';
+    const secure = process.env.SMTP_SECURE !== 'false' && port === 465;
     if (!user || !pass) {
         return null;
     }
@@ -17,9 +17,9 @@ function getTransporter() {
             port,
             secure,
             auth: { user, pass },
-            pool: true,
-            maxConnections: 3,
-            maxMessages: 100,
+            connectionTimeout: 10000,
+            greetingTimeout: 10000,
+            socketTimeout: 15000,
         });
     }
     return transporter;
@@ -30,11 +30,10 @@ export function getEmailSignature(companyName = 'blindarea Production') {
     <div style="margin-top: 32px; padding-top: 20px; border-top: 1px solid #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #475569; font-size: 14px; line-height: 1.5;">
       <p style="margin: 0 0 6px 0; color: #64748b; font-size: 14px;">Thanks &amp; Regards,</p>
       <p style="margin: 0; font-weight: 700; color: #0f172a; font-size: 15px; letter-spacing: -0.01em;">${companyName}</p>
-      <p style="margin: 2px 0 0 0; font-size: 12px; color: #94a3b8;">Office Attendance &amp; Operations Management</p>
     </div>
   `;
 
-    const text = `\n\nThanks & Regards,\n${companyName}\nOffice Attendance & Operations Management`;
+    const text = `\n\nThanks & Regards,\n${companyName}`;
 
     return { html, text };
 }
@@ -42,11 +41,12 @@ export function getEmailSignature(companyName = 'blindarea Production') {
 export async function sendEmail(options) {
     const trans = getTransporter();
     if (!trans) {
-        console.warn('[EMAIL_SEND_SKIPPED] SMTP credentials not configured.');
-        return { success: false, error: 'SMTP credentials not configured' };
+        console.warn('[EMAIL_SEND_SKIPPED] SMTP credentials not configured. Please set SMTP_USER and SMTP_PASSWORD in Vercel Environment Variables.');
+        return { success: false, error: 'SMTP credentials not configured in environment variables' };
     }
     try {
         const from = process.env.EMAIL_FROM || `Office Attendance <${process.env.SMTP_USER}>`;
+        console.log(`[EMAIL_SENDING] Initiating delivery to ${options.to} via ${process.env.SMTP_HOST || 'smtp.gmail.com'}...`);
         const info = await trans.sendMail({
             from,
             to: options.to,
@@ -54,10 +54,11 @@ export async function sendEmail(options) {
             html: options.html,
             text: options.text,
         });
+        console.log(`[EMAIL_SEND_SUCCESS] Message ID: ${info.messageId} delivered to ${options.to}`);
         return { success: true, messageId: info.messageId };
     }
     catch (error) {
-        console.error('[EMAIL_SEND_FAILED]', error?.message);
+        console.error('[EMAIL_SEND_FAILED] Error sending email to', options.to, ':', error?.message);
         return { success: false, error: error?.message || 'Failed to send email' };
     }
 }

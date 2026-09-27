@@ -96,12 +96,15 @@ app.use('/api/work-sessions', workSessionsRouter);
 // Health check & diagnostic endpoint
 app.get(['/', '/health', '/api/health'], (req, res) => {
     const isDbConnected = mongoose.connection.readyState === 1;
+    const isSmtpConfigured = Boolean(process.env.SMTP_USER && process.env.SMTP_PASSWORD);
     res.json({
         success: isDbConnected,
         status: isDbConnected ? 'API operational & Database connected' : 'Database disconnected or connecting',
         dbConnected: isDbConnected,
         dbState: mongoose.connection.readyState, // 0: disconnected, 1: connected, 2: connecting, 3: disconnecting
         dbName: mongoose.connection.name || process.env.MONGODB_DB_NAME || 'attendance_db',
+        smtpConfigured: isSmtpConfigured,
+        smtpHost: isSmtpConfigured ? (process.env.SMTP_HOST || 'smtp.gmail.com') : 'Not configured',
         environment: process.env.NODE_ENV || 'development',
         timestamp: new Date().toISOString(),
     });
