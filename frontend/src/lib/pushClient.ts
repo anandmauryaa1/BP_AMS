@@ -1,4 +1,10 @@
 import { apiFetch } from './api';
+import {
+  ONESIGNAL_APP_ID,
+  optInOneSignal,
+  optOutOneSignal,
+  checkOneSignalSubscription,
+} from './onesignal';
 
 export const FALLBACK_VAPID_PUBLIC_KEY =
   'BK7Xg38hJND12d_9QDFs6aX-LZlftJ1a7wwog2f88LxtyUcii0oNPUTchgRTMbTDl73Q5ptrQB2cOobIifNRgUw';
@@ -60,7 +66,12 @@ export async function registerServiceWorker(): Promise<ServiceWorkerRegistration
 /**
  * Retrieve the active PushSubscription if already registered on this browser
  */
-export async function getCurrentPushSubscription(): Promise<PushSubscription | null> {
+export async function getCurrentPushSubscription(): Promise<PushSubscription | null | boolean> {
+  if (ONESIGNAL_APP_ID) {
+    const isSubscribed = await checkOneSignalSubscription();
+    if (isSubscribed) return true as any;
+  }
+
   if (!isPushNotificationSupported()) return null;
 
   try {
@@ -82,6 +93,16 @@ export async function subscribeToPushNotifications(): Promise<{
   error?: string;
   subscription?: PushSubscription;
 }> {
+  if (ONESIGNAL_APP_ID) {
+    const osResult = await optInOneSignal();
+    if (osResult.success) {
+      return {
+        success: true,
+        message: 'OneSignal Push notifications activated successfully.',
+      };
+    }
+  }
+
   if (!isPushNotificationSupported()) {
     return {
       success: false,
@@ -171,8 +192,12 @@ export async function unsubscribeFromPushNotifications(): Promise<{
   message?: string;
   error?: string;
 }> {
+  if (ONESIGNAL_APP_ID) {
+    await optOutOneSignal();
+  }
+
   if (!isPushNotificationSupported()) {
-    return { success: false, error: 'Web Push not supported' };
+    return { success: true, message: 'Unsubscribed from OneSignal.' };
   }
 
   try {

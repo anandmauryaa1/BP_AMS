@@ -58,7 +58,7 @@ router.get('/:id', async (req, res) => {
         return res.status(500).json({ success: false, error: 'Failed to fetch project' });
     }
 });
-router.put('/:id', requireManagerOrAdmin, async (req, res) => {
+const handleUpdateProject = async (req, res) => {
     try {
         await connectToDatabase();
         const updated = await Project.findByIdAndUpdate(req.params.id, req.body, { new: true });
@@ -68,10 +68,13 @@ router.put('/:id', requireManagerOrAdmin, async (req, res) => {
         return res.json({ success: true, data: updated });
     }
     catch (error) {
-        console.error('[API:Projects:PUT] Error:', error);
+        console.error('[API:Projects:UPDATE] Error:', error);
         return res.status(500).json({ success: false, error: 'Failed to update project' });
     }
-});
+};
+
+router.put('/:id', requireManagerOrAdmin, handleUpdateProject);
+router.patch('/:id', requireManagerOrAdmin, handleUpdateProject);
 router.delete('/:id', requireManagerOrAdmin, async (req, res) => {
     try {
         await connectToDatabase();

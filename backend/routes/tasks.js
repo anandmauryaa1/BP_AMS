@@ -96,7 +96,7 @@ router.get('/:id', async (req, res) => {
         return res.status(500).json({ success: false, error: 'Failed to fetch task' });
     }
 });
-router.put('/:id', async (req, res) => {
+const handleUpdateTask = async (req, res) => {
     try {
         await connectToDatabase();
         const { id } = req.params;
@@ -209,10 +209,13 @@ router.put('/:id', async (req, res) => {
         });
     }
     catch (error) {
-        console.error('[API:Tasks:PUT] Error:', error);
+        console.error('[API:Tasks:UPDATE] Error:', error);
         return res.status(500).json({ success: false, error: 'Failed to update task' });
     }
-});
+};
+
+router.put('/:id', handleUpdateTask);
+router.patch('/:id', handleUpdateTask);
 router.delete('/:id', requireManagerOrAdmin, async (req, res) => {
     try {
         await connectToDatabase();

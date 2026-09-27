@@ -192,9 +192,15 @@ export default function AdminEmployeesPage() {
         body: JSON.stringify(editForm),
       });
 
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        const errMsg = data.error || data.message || 'Failed to update employee';
+      let data: any = null;
+      try {
+        data = await res.json();
+      } catch {
+        data = null;
+      }
+
+      if (!res.ok || !data?.success) {
+        const errMsg = data?.error || data?.message || `Failed to update employee (HTTP ${res.status})`;
         setEditError(errMsg);
         showToast(errMsg, 'error');
         setIsSubmittingEdit(false);
@@ -204,8 +210,8 @@ export default function AdminEmployeesPage() {
       showToast('Employee updated successfully', 'success');
       setEditingEmployee(null);
       fetchEmployees();
-    } catch {
-      const errMsg = 'Network error updating employee';
+    } catch (err: any) {
+      const errMsg = err?.message || 'Network error updating employee';
       setEditError(errMsg);
       showToast(errMsg, 'error');
     } finally {

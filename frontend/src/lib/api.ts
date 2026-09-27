@@ -43,6 +43,7 @@ export async function apiFetch<T = any>(
   };
 
   try {
+    const response = await fetch(url, config);
     let data: any = null;
     const contentType = response.headers.get('content-type') || '';
     if (contentType.includes('application/json')) {

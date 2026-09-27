@@ -62,7 +62,7 @@ router.get('/:id', async (req, res) => {
         return res.status(500).json({ success: false, error: 'Failed to fetch deliverable' });
     }
 });
-router.put('/:id', async (req, res) => {
+const handleUpdateDeliverable = async (req, res) => {
     try {
         await connectToDatabase();
         const { id } = req.params;
@@ -96,10 +96,13 @@ router.put('/:id', async (req, res) => {
         return res.json({ success: true, data: updated });
     }
     catch (error) {
-        console.error('[API:Deliverables:PUT] Error:', error);
+        console.error('[API:Deliverables:UPDATE] Error:', error);
         return res.status(500).json({ success: false, error: 'Failed to update deliverable' });
     }
-});
+};
+
+router.put('/:id', handleUpdateDeliverable);
+router.patch('/:id', handleUpdateDeliverable);
 router.delete('/:id', async (req, res) => {
     try {
         await connectToDatabase();

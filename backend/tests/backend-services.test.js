@@ -109,4 +109,33 @@ describe('Backend Services & Security Core Audit', () => {
       expect(working).toBe(480);
     });
   });
+
+  describe('5. REST Route Compatibility (PUT & PATCH)', () => {
+    it('should support both PATCH and PUT for employee updates in admin router', async () => {
+      const { default: adminRouter } = await import('../routes/admin.js');
+      const patchRoute = adminRouter.stack.find(
+        (l) => l.route?.path === '/employees/:id' && l.route?.methods?.patch
+      );
+      const putRoute = adminRouter.stack.find(
+        (l) => l.route?.path === '/employees/:id' && l.route?.methods?.put
+      );
+
+      expect(patchRoute).toBeDefined();
+      expect(putRoute).toBeDefined();
+    });
+
+    it('should support both PATCH and PUT for task updates in tasks router', async () => {
+      const { default: tasksRouter } = await import('../routes/tasks.js');
+      const patchRoute = tasksRouter.stack.find(
+        (l) => l.route?.path === '/:id' && l.route?.methods?.patch
+      );
+      const putRoute = tasksRouter.stack.find(
+        (l) => l.route?.path === '/:id' && l.route?.methods?.put
+      );
+
+      expect(patchRoute).toBeDefined();
+      expect(putRoute).toBeDefined();
+    });
+  });
 });
+

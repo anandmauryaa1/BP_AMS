@@ -58,7 +58,7 @@ router.post('/', async (req, res) => {
         return res.status(500).json({ success: false, error: error.message || 'Failed to submit leave request' });
     }
 });
-router.put('/:id', requireManagerOrAdmin, async (req, res) => {
+const handleUpdateLeave = async (req, res) => {
     try {
         await connectToDatabase();
         const { status, rejectionsReason } = req.body;
@@ -90,8 +90,11 @@ router.put('/:id', requireManagerOrAdmin, async (req, res) => {
         });
     }
     catch (error) {
-        console.error('[API:Leaves:PUT] Error:', error);
+        console.error('[API:Leaves:UPDATE] Error:', error);
         return res.status(500).json({ success: false, error: 'Failed to update leave request' });
     }
-});
+};
+
+router.put('/:id', requireManagerOrAdmin, handleUpdateLeave);
+router.patch('/:id', requireManagerOrAdmin, handleUpdateLeave);
 export default router;

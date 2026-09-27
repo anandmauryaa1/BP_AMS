@@ -166,7 +166,7 @@ router.post('/employees', async (req, res) => {
         return res.status(500).json({ success: false, error: 'Failed to create employee' });
     }
 });
-router.put('/employees/:id', async (req, res) => {
+const handleUpdateEmployee = async (req, res) => {
     try {
         const { id } = req.params;
         await connectToDatabase();
@@ -187,8 +187,15 @@ router.put('/employees/:id', async (req, res) => {
             employee.designation = updates.designation;
         if (updates.role)
             employee.role = updates.role;
-        if (updates.status)
-            employee.status = updates.status;
+        if (updates.status) {
+            const normalizedStatus = String(updates.status).trim().toUpperCase();
+            if (['ACTIVE', 'INACTIVE'].includes(normalizedStatus)) {
+                if (employee._id.toString() === req.user.userId && normalizedStatus === 'INACTIVE') {
+                    return res.status(400).json({ success: false, error: 'Cannot deactivate your own currently active account' });
+                }
+                employee.status = normalizedStatus;
+            }
+        }
         await employee.save();
         await logAuditEvent({
             actorId: req.user.userId,
@@ -203,10 +210,13 @@ router.put('/employees/:id', async (req, res) => {
         return res.json({ success: true, message: 'Employee updated successfully', data: employee });
     }
     catch (error) {
-        console.error('[API:Admin:Employees:PUT] Error:', error);
-        return res.status(500).json({ success: false, error: 'Failed to update employee' });
+        console.error('[API:Admin:Employees:UPDATE] Error:', error);
+        return res.status(500).json({ success: false, error: error?.message || 'Failed to update employee' });
     }
-});
+};
+
+router.put('/employees/:id', handleUpdateEmployee);
+router.patch('/employees/:id', handleUpdateEmployee);
 router.post('/employees/:id/reset-password', async (req, res) => {
     try {
         const { id } = req.params;
