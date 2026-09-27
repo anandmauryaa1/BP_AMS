@@ -93,14 +93,17 @@ app.use('/api/plans', plansRouter);
 app.use('/api/channels', channelsRouter);
 app.use('/api/series', seriesRouter);
 app.use('/api/work-sessions', workSessionsRouter);
-// Health check
-app.get('/api/health', (req, res) => {
+// Health check & diagnostic endpoint
+app.get(['/', '/health', '/api/health'], (req, res) => {
+    const isDbConnected = mongoose.connection.readyState === 1;
     res.json({
-        success: true,
-        status: 'API operational',
-        port: PORT,
+        success: isDbConnected,
+        status: isDbConnected ? 'API operational & Database connected' : 'Database disconnected or connecting',
+        dbConnected: isDbConnected,
+        dbState: mongoose.connection.readyState, // 0: disconnected, 1: connected, 2: connecting, 3: disconnecting
+        dbName: mongoose.connection.name || process.env.MONGODB_DB_NAME || 'attendance_db',
         environment: process.env.NODE_ENV || 'development',
-        dbConnected: mongoose.connection.readyState === 1,
+        timestamp: new Date().toISOString(),
     });
 });
 // Centralized Global Error Handler Middleware
