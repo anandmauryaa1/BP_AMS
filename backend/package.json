@@ -3,14 +3,15 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "main": "server.js",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "dev:backend": "tsx watch src/server.ts",
-    "build": "tsc",
-    "start": "node dist/server.js",
-    "seed": "tsx src/scripts/seed.ts",
-    "clean:prod": "tsx src/scripts/clean-production.ts",
-    "seed:prod": "tsx src/scripts/clean-production.ts",
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "dev:backend": "node --watch server.js",
+    "build": "node -e \"console.log('No build step required for backend')\"",
+    "seed": "node scripts/seed.js",
+    "clean:prod": "node scripts/clean-production.js",
+    "seed:prod": "node scripts/clean-production.js",
     "test": "vitest run"
   },
   "dependencies": {

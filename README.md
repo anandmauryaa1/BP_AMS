@@ -1,4 +1,4 @@
-﻿# blindarea Production - Media Production Management & Employee Attendance System (BP_AMS)
+# blindarea Production - Media Production Management & Employee Attendance System (BP_AMS)
 
 A lightweight, secure, enterprise-grade **Media Production Management + Employee Attendance System** tailored for YouTube, Instagram, and Facebook multi-channel media studio operations.
 
@@ -12,8 +12,14 @@ BP_AMS/
 │   ├── src/              # Pages, components, mobile-responsive layouts
 │   ├── .env.example      # Frontend environment variables template
 │   └── package.json
-├── backend/              # Node.js Express + MongoDB API Service
-│   ├── src/              # Routes, models, RBAC middleware, email services
+├── backend/              # Node.js Express + MongoDB API Service (Standard JavaScript)
+│   ├── server.js         # Main Express HTTP server entry point
+│   ├── routes/           # RESTful API route modules
+│   ├── models/           # Mongoose schemas & data models
+│   ├── middleware/       # JWT auth & RBAC middleware
+│   ├── services/         # Business logic, analytics, notifications
+│   ├── utils/            # Helper utilities
+│   ├── scripts/          # Database seeding & clean scripts
 │   ├── .env.example      # Backend environment variables template
 │   └── package.json
 ├── package.json          # Root monorepo scripts
