@@ -53,10 +53,18 @@ export default function AdminChannelsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const getAuthHeaders = (): Record<string, string> => {
+    const token = typeof window !== 'undefined' ? (localStorage.getItem('auth_token') || localStorage.getItem('token')) : null;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   const fetchChannels = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/channels');
+      const res = await fetch('/api/channels', {
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
       const data = await res.json();
       const list = data.data?.channels || data.channels || (Array.isArray(data.data) ? data.data : []);
       setChannels(list);
@@ -78,7 +86,10 @@ export default function AdminChannelsPage() {
   const fetchSeries = async (channelId: string) => {
     try {
       setSeriesLoading(true);
-      const res = await fetch(`/api/series?channelId=${channelId}`);
+      const res = await fetch(`/api/series?channelId=${channelId}`, {
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
       const data = await res.json();
       const list = data.data?.series || data.series || (Array.isArray(data.data) ? data.data : []);
       setSeriesList(list);
@@ -111,12 +122,13 @@ export default function AdminChannelsPage() {
         code: channelForm.code.trim().toUpperCase(),
         platform: channelForm.platform,
         channelUrl: channelForm.channelUrl.trim() || undefined,
-        handle: channelForm.code ? `@${channelForm.code.trim()}` : undefined,
+        handle: channelForm.code ? `@${channelForm.code.trim().toLowerCase()}` : `@${channelForm.name.replace(/\s+/g, '').toLowerCase()}`,
       };
 
       const res = await fetch('/api/channels', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        credentials: 'include',
         body: JSON.stringify(payload),
       });
 
@@ -150,7 +162,8 @@ export default function AdminChannelsPage() {
 
       const res = await fetch('/api/series', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        credentials: 'include',
         body: JSON.stringify(payload),
       });
 
@@ -174,7 +187,11 @@ export default function AdminChannelsPage() {
     e.stopPropagation();
     if (!window.confirm(`Are you sure you want to delete channel "${channelName}"?`)) return;
     try {
-      const res = await fetch(`/api/channels/${channelId}`, { method: 'DELETE' });
+      const res = await fetch(`/api/channels/${channelId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
       const data = await res.json();
       if (!res.ok || !data.success) {
         alert(data.message || 'Failed to delete channel');
@@ -192,7 +209,11 @@ export default function AdminChannelsPage() {
   const handleDeleteSeries = async (seriesId: string, seriesName: string) => {
     if (!window.confirm(`Are you sure you want to delete series "${seriesName}"?`)) return;
     try {
-      const res = await fetch(`/api/series/${seriesId}`, { method: 'DELETE' });
+      const res = await fetch(`/api/series/${seriesId}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
       const data = await res.json();
       if (!res.ok || !data.success) {
         alert(data.message || 'Failed to delete series');

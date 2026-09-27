@@ -36,7 +36,47 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
     try {
         await connectToDatabase();
-        const deliverable = await Deliverable.create(req.body);
+        const body = { ...req.body };
+
+        // Map frontend 'type' field to the model's 'format' enum field
+        // Frontend sends: YOUTUBE_MAIN_VIDEO, YOUTUBE_SHORTS, INSTAGRAM_REEL, etc.
+        // Model accepts:  FULL_VIDEO, SHORT_VIDEO, REEL, POST, CAROUSEL, STORY, OTHER
+        const typeToFormatMap = {
+            YOUTUBE_MAIN_VIDEO: 'FULL_VIDEO',
+            YOUTUBE_LONGFORM: 'FULL_VIDEO',
+            YOUTUBE_SHORTS: 'SHORT_VIDEO',
+            INSTAGRAM_REEL: 'REEL',
+            INSTAGRAM_POST: 'POST',
+            INSTAGRAM_CAROUSEL: 'CAROUSEL',
+            INSTAGRAM_STORY: 'STORY',
+            FACEBOOK_VIDEO: 'FULL_VIDEO',
+            FACEBOOK_REEL: 'REEL',
+            COMMUNITY_POST: 'POST',
+            THUMBNAIL_PRIMARY: 'OTHER',
+            TIKTOK_VIDEO: 'SHORT_VIDEO',
+            TWITTER_VIDEO: 'SHORT_VIDEO',
+        };
+        const VALID_FORMATS = ['FULL_VIDEO', 'SHORT_VIDEO', 'REEL', 'POST', 'CAROUSEL', 'STORY', 'OTHER'];
+
+        if (body.type && !body.format) {
+            body.format = typeToFormatMap[body.type.toUpperCase()] || 
+                          (VALID_FORMATS.includes(body.type.toUpperCase()) ? body.type.toUpperCase() : 'OTHER');
+        } else if (body.format && !VALID_FORMATS.includes(body.format.toUpperCase())) {
+            // format was set but isn't a valid enum — try the map
+            body.format = typeToFormatMap[body.format.toUpperCase()] || 'OTHER';
+        }
+        delete body.type;
+
+        // Map scheduledReleaseDate → scheduledAt
+        if (body.scheduledReleaseDate && !body.scheduledAt) {
+            body.scheduledAt = body.scheduledReleaseDate;
+        }
+        delete body.scheduledReleaseDate;
+        // Strip fields not in model
+        delete body.targetDurationSeconds;
+        delete body.aspectRatio;
+
+        const deliverable = await Deliverable.create(body);
         return res.status(201).json({ success: true, data: deliverable });
     }
     catch (error) {
@@ -44,6 +84,8 @@ router.post('/', async (req, res) => {
         return res.status(500).json({ success: false, error: error.message || 'Failed to create deliverable' });
     }
 });
+
+
 router.get('/:id', async (req, res) => {
     try {
         await connectToDatabase();

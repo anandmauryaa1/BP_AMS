@@ -1,9 +1,11 @@
 import mongoose, { Schema } from 'mongoose';
 const DailyPlanSchema = new Schema({
     date: { type: String, required: true, index: true },
-    managerId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    managerId: { type: Schema.Types.Mixed },
     managerName: { type: String },
     userId: { type: Schema.Types.ObjectId, ref: 'User' },
+    employeeId: { type: String, index: true },
+    employeeName: { type: String },
     focusGoal: { type: String },
     assignedTaskIds: [{ type: Schema.Types.ObjectId, ref: 'Task' }],
     projects: [{ type: Schema.Types.ObjectId, ref: 'Project' }],
@@ -23,11 +25,12 @@ const DailyPlanSchema = new Schema({
         },
     ],
     notes: { type: String },
-}, { timestamps: true });
+}, { timestamps: true, strict: false });
+
 const WeeklyPlanSchema = new Schema({
     weekStartDate: { type: String, required: true, index: true },
     weekEndDate: { type: String, required: true },
-    managerId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    managerId: { type: Schema.Types.Mixed },
     managerName: { type: String },
     projects: [{ type: Schema.Types.ObjectId, ref: 'Project' }],
     tasks: [{ type: Schema.Types.ObjectId, ref: 'Task' }],
@@ -40,11 +43,16 @@ const WeeklyPlanSchema = new Schema({
         },
     ],
     notes: { type: String },
-}, { timestamps: true });
+}, { timestamps: true, strict: false });
+
 const MonthlyPlanSchema = new Schema({
+    channelId: { type: Schema.Types.ObjectId, ref: 'Channel' },
     month: { type: Number, required: true },
     year: { type: Number, required: true },
-    managerId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    targetLongformVideos: { type: Number, default: 0 },
+    targetShortsReels: { type: Number, default: 0 },
+    primaryFocus: { type: String },
+    managerId: { type: Schema.Types.Mixed },
     managerName: { type: String },
     channelTargets: [
         {
@@ -61,8 +69,13 @@ const MonthlyPlanSchema = new Schema({
     importantShootDates: { type: String },
     notes: { type: String },
     status: { type: String, enum: ['DRAFT', 'ACTIVE', 'COMPLETED'], default: 'DRAFT' },
-}, { timestamps: true });
-export const DailyPlan = mongoose.models.DailyPlan || mongoose.model('DailyPlan', DailyPlanSchema);
+}, { timestamps: true, strict: false });
+
+if (mongoose.models?.DailyPlan) delete mongoose.models.DailyPlan;
+if (mongoose.models?.WeeklyPlan) delete mongoose.models.WeeklyPlan;
+if (mongoose.models?.MonthlyPlan) delete mongoose.models.MonthlyPlan;
+
+export const DailyPlan = mongoose.model('DailyPlan', DailyPlanSchema);
 export const Plan = DailyPlan;
-export const WeeklyPlan = mongoose.models.WeeklyPlan || mongoose.model('WeeklyPlan', WeeklyPlanSchema);
-export const MonthlyPlan = mongoose.models.MonthlyPlan || mongoose.model('MonthlyPlan', MonthlyPlanSchema);
+export const WeeklyPlan = mongoose.model('WeeklyPlan', WeeklyPlanSchema);
+export const MonthlyPlan = mongoose.model('MonthlyPlan', MonthlyPlanSchema);

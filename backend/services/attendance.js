@@ -33,10 +33,33 @@ export async function getTodayAttendance(employeeId, customDate) {
     const dateStr = customDate || getTodayDateString();
     return Attendance.findOne({ employeeId, date: dateStr });
 }
+export function normalizeLocation(loc) {
+    if (!loc) return undefined;
+    if (typeof loc === 'string') return { address: loc };
+    if (typeof loc === 'object') {
+        const out = {};
+        if (loc.latitude !== undefined && loc.latitude !== null && !isNaN(Number(loc.latitude))) {
+            out.latitude = Number(loc.latitude);
+        }
+        if (loc.longitude !== undefined && loc.longitude !== null && !isNaN(Number(loc.longitude))) {
+            out.longitude = Number(loc.longitude);
+        }
+        if (loc.accuracy !== undefined && loc.accuracy !== null && !isNaN(Number(loc.accuracy))) {
+            out.accuracy = Number(loc.accuracy);
+        }
+        if (loc.address) {
+            out.address = String(loc.address);
+        }
+        return Object.keys(out).length > 0 ? out : undefined;
+    }
+    return undefined;
+}
+
 export async function checkIn(employeeId, location) {
     await connectToDatabase();
     const todayStr = getTodayDateString();
     const serverNow = new Date();
+    const normLoc = normalizeLocation(location);
     const user = await User.findOne({ employeeId }).lean();
     if (!user || user.status !== 'ACTIVE') {
         return { success: false, message: 'Employee account is not active or not found' };
@@ -71,14 +94,14 @@ export async function checkIn(employeeId, location) {
         }
         existing.sessions.push({
             checkIn: serverNow,
-            checkInLocation: location,
+            checkInLocation: normLoc,
             durationMinutes: 0,
         });
         if (!existing.checkIn) {
             existing.checkIn = serverNow;
         }
-        if (location) {
-            existing.checkInLocation = location;
+        if (normLoc) {
+            existing.checkInLocation = normLoc;
         }
         existing.checkOut = undefined;
         existing.status = 'PRESENT';
@@ -94,7 +117,7 @@ export async function checkIn(employeeId, location) {
     try {
         const initialSession = {
             checkIn: serverNow,
-            checkInLocation: location,
+            checkInLocation: normLoc,
             durationMinutes: 0,
         };
         const newAttendance = await Attendance.create({
@@ -102,7 +125,7 @@ export async function checkIn(employeeId, location) {
             date: todayStr,
             status: 'PRESENT',
             checkIn: serverNow,
-            checkInLocation: location,
+            checkInLocation: normLoc,
             sessions: [initialSession],
             breaks: [],
             totalWorkingMinutes: 0,
@@ -196,6 +219,7 @@ export async function checkOut(employeeId, location) {
     await connectToDatabase();
     const todayStr = getTodayDateString();
     const serverNow = new Date();
+    const normLoc = normalizeLocation(location);
     const attendance = await Attendance.findOne({ employeeId, date: todayStr });
     if (!attendance) {
         return { success: false, message: 'No attendance record found for today. Cannot check out.' };
@@ -220,8 +244,8 @@ export async function checkOut(employeeId, location) {
         .reduce((sum, b) => sum + (b.durationMinutes || 0), 0);
     attendance.totalBreakMinutes = totalBreaks;
     attendance.checkOut = serverNow;
-    if (location) {
-        attendance.checkOutLocation = location;
+    if (normLoc) {
+        attendance.checkOutLocation = normLoc;
     }
     attendance.status = 'COMPLETED';
     if (!attendance.sessions) {
@@ -238,8 +262,8 @@ export async function checkOut(employeeId, location) {
         const lastSession = attendance.sessions[attendance.sessions.length - 1];
         if (!lastSession.checkOut) {
             lastSession.checkOut = serverNow;
-            if (location)
-                lastSession.checkOutLocation = location;
+            if (normLoc)
+                lastSession.checkOutLocation = normLoc;
             lastSession.durationMinutes = Math.max(0, Math.floor((serverNow.getTime() - new Date(lastSession.checkIn).getTime()) / (1000 * 60)));
         }
         const totalSessionMinutes = attendance.sessions.reduce((sum, s) => sum + (s.durationMinutes || 0), 0);

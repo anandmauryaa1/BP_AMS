@@ -4,9 +4,13 @@ import { connectToDatabase } from '../db.js';
 import { User } from '../models/User.js';
 import { Attendance } from '../models/Attendance.js';
 import { AuditLog } from '../models/AuditLog.js';
+import { Project } from '../models/Project.js';
+import { Task } from '../models/Task.js';
+import { Deliverable } from '../models/Deliverable.js';
 import { authenticateToken, requireManagerOrAdmin, hashPassword } from '../middleware/auth.js';
 import { logAuditEvent } from '../services/audit.js';
-import { sendWelcomeEmail, sendAdminPasswordResetEmail } from '../services/email.js';
+import { sendEmail, sendWelcomeEmail, sendAdminPasswordResetEmail } from '../services/email.js';
+import { getTodayDateString } from '../utils/index.js';
 const router = Router();
 const CreateEmployeeSchema = z.object({
     employeeId: z.string().min(2).max(20).trim().toUpperCase(),
@@ -23,8 +27,12 @@ const CreateEmployeeSchema = z.object({
     department: z.string().min(2).max(50).trim(),
     designation: z.string().optional(),
     role: z.enum(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'EMPLOYEE']).default('EMPLOYEE'),
-    initialPassword: z.string().min(8, 'Initial password must be at least 8 characters long'),
+    initialPassword: z.string().min(8).optional(),
+    password: z.string().min(8).optional(),
     sendWelcomeEmail: z.boolean().default(true),
+}).refine(data => data.initialPassword || data.password, {
+    message: 'Initial password must be at least 8 characters long',
+    path: ['initialPassword']
 });
 router.use(authenticateToken, requireManagerOrAdmin);
 router.get('/employees', async (req, res) => {
@@ -123,7 +131,8 @@ router.post('/employees', async (req, res) => {
         if (existingEmail) {
             return res.status(400).json({ success: false, error: `Email "${email}" is already registered` });
         }
-        const passwordHash = await hashPassword(initialPassword);
+        const passwordToUse = initialPassword || parsed.data.password;
+        const passwordHash = await hashPassword(passwordToUse);
         const newEmployee = await User.create({
             employeeId,
             username,
@@ -301,8 +310,87 @@ router.delete('/employees/:id', async (req, res) => {
 router.get('/reports', async (req, res) => {
     try {
         await connectToDatabase();
-        const startDate = req.query.startDate || new Date().toISOString().split('T')[0];
-        const endDate = req.query.endDate || new Date().toISOString().split('T')[0];
+        const todayStr = getTodayDateString();
+        const startDate = req.query.startDate || todayStr;
+        const endDate = req.query.endDate || todayStr;
+
+        // 1. Staff Attendance live metrics
+        const totalEmployees = await User.countDocuments({ status: 'ACTIVE' });
+        const todayAttendances = await Attendance.find({ date: todayStr }).lean();
+        const currentlyWorking = todayAttendances.filter(a => a.status === 'PRESENT').length;
+        const currentlyOnBreak = todayAttendances.filter(a => a.status === 'ON_BREAK').length;
+        const completedAttendance = todayAttendances.filter(a => a.status === 'COMPLETED').length;
+        const presentToday = currentlyWorking + currentlyOnBreak + completedAttendance;
+        const absentToday = Math.max(0, totalEmployees - presentToday);
+        const pendingCorrectionsCount = await Attendance.countDocuments({ 'correction.status': 'PENDING' });
+
+        const dashboardMetrics = {
+            totalEmployees,
+            presentToday,
+            absentToday,
+            currentlyWorking,
+            currentlyOnBreak,
+            completedAttendance,
+            pendingCorrectionsCount,
+        };
+
+        // 2. Production pipeline live metrics
+        const now = new Date();
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+        const [
+            activeProjectsCount,
+            publishedProjectsCount,
+            totalTasksCount,
+            pendingTasksCount,
+            tasksDueTodayCount,
+            overdueTasksCount,
+            scheduledDeliverablesCount,
+            publishedDeliverablesCount,
+            ytFullCount,
+            ytShortCount,
+            igReelCount,
+            fbReelCount,
+        ] = await Promise.all([
+            Project.countDocuments({ status: { $nin: ['PUBLISHED', 'CANCELLED', 'ARCHIVED'] } }),
+            Project.countDocuments({ status: { $in: ['PUBLISHED', 'COMPLETED'] } }),
+            Task.countDocuments({}),
+            Task.countDocuments({ status: { $nin: ['COMPLETED', 'CANCELLED'] } }),
+            Task.countDocuments({
+                dueDate: { $gte: startOfToday, $lte: endOfToday },
+                status: { $nin: ['COMPLETED', 'CANCELLED'] },
+            }),
+            Task.countDocuments({
+                dueDate: { $lt: startOfToday },
+                status: { $nin: ['COMPLETED', 'CANCELLED'] },
+            }),
+            Deliverable.countDocuments({ status: { $in: ['SCHEDULED', 'PLANNED', 'IN_PRODUCTION', 'READY_FOR_REVIEW'] } }),
+            Deliverable.countDocuments({ status: 'PUBLISHED' }),
+            Deliverable.countDocuments({ platform: 'YOUTUBE', format: 'FULL_VIDEO', status: 'PUBLISHED' }),
+            Deliverable.countDocuments({ platform: 'YOUTUBE', format: 'SHORT_VIDEO', status: 'PUBLISHED' }),
+            Deliverable.countDocuments({ platform: 'INSTAGRAM', status: 'PUBLISHED' }),
+            Deliverable.countDocuments({ platform: 'FACEBOOK', status: 'PUBLISHED' }),
+        ]);
+
+        const productionMetrics = {
+            activeProjectsCount,
+            publishedProjectsCount,
+            totalTasksCount,
+            pendingTasksCount,
+            tasksDueTodayCount,
+            overdueTasksCount,
+            scheduledDeliverablesCount,
+            publishedDeliverablesCount,
+            productionOutput: {
+                youtubeVideos: ytFullCount,
+                youtubeShorts: ytShortCount,
+                instagramReels: igReelCount,
+                facebookReels: fbReelCount,
+            },
+        };
+
+        // 3. Historical range analytics for report export
         const attendanceRecords = await Attendance.find({
             date: { $gte: startDate, $lte: endDate },
         }).lean();
@@ -316,6 +404,7 @@ router.get('/reports', async (req, res) => {
             const mins = att.totalWorkingMinutes || 0;
             deptMap[dept] = (deptMap[dept] || 0) + mins;
             records.push({
+                _id: att._id,
                 employeeId: att.employeeId,
                 employeeName: u?.name || att.employeeName || att.employeeId,
                 department: dept,
@@ -332,9 +421,12 @@ router.get('/reports', async (req, res) => {
             totalMinutes,
             totalHours: Math.round((totalMinutes / 60) * 10) / 10,
         }));
+
         return res.json({
             success: true,
             data: {
+                dashboardMetrics,
+                productionMetrics,
                 rangeAnalytics: {
                     startDate,
                     endDate,
@@ -349,6 +441,230 @@ router.get('/reports', async (req, res) => {
         return res.status(500).json({ success: false, error: 'Failed to fetch admin reports' });
     }
 });
+
+router.get('/attendance', async (req, res) => {
+    try {
+        await connectToDatabase();
+        const date = req.query.date || getTodayDateString();
+        const department = req.query.department;
+        const status = req.query.status;
+        const employeeId = req.query.employeeId;
+        const limit = parseInt(req.query.limit || '100', 10);
+        const page = parseInt(req.query.page || '1', 10);
+
+        let userQuery = { status: 'ACTIVE' };
+        if (department && department !== 'ALL') {
+            userQuery.department = department;
+        }
+        if (employeeId) {
+            userQuery.$or = [
+                { employeeId: { $regex: employeeId, $options: 'i' } },
+                { name: { $regex: employeeId, $options: 'i' } },
+            ];
+        }
+
+        const users = await User.find(userQuery).select('name employeeId department designation role').lean();
+        const empIds = users.map((u) => u.employeeId);
+
+        let attQuery = { date, employeeId: { $in: empIds } };
+        if (status && status !== 'ALL') {
+            attQuery.status = status;
+        }
+
+        const attendances = await Attendance.find(attQuery).lean();
+        const attMap = new Map(attendances.map((a) => [a.employeeId, a]));
+
+        let records = users.map((u) => {
+            const att = attMap.get(u.employeeId);
+            if (att) {
+                return {
+                    _id: att._id,
+                    employeeId: u.employeeId,
+                    employeeName: u.name,
+                    department: u.department,
+                    designation: u.designation,
+                    date: att.date,
+                    status: att.status,
+                    checkIn: att.checkIn,
+                    checkOut: att.checkOut,
+                    totalWorkingMinutes: att.totalWorkingMinutes || 0,
+                    totalBreakMinutes: att.totalBreakMinutes || 0,
+                    correction: att.correction,
+                    breaks: att.breaks || [],
+                    sessions: att.sessions || [],
+                };
+            }
+            return {
+                _id: u._id.toString(),
+                employeeId: u.employeeId,
+                employeeName: u.name,
+                department: u.department,
+                designation: u.designation,
+                date,
+                status: 'NOT_CHECKED_IN',
+                checkIn: null,
+                checkOut: null,
+                totalWorkingMinutes: 0,
+                totalBreakMinutes: 0,
+                correction: null,
+                breaks: [],
+                sessions: [],
+            };
+        });
+
+        if (status && status !== 'ALL') {
+            records = records.filter((r) => r.status === status);
+        }
+
+        const totalRecords = records.length;
+        const paginatedRecords = records.slice((page - 1) * limit, page * limit);
+
+        return res.json({
+            success: true,
+            data: {
+                records: paginatedRecords,
+                pagination: {
+                    totalRecords,
+                    page,
+                    limit,
+                    totalPages: Math.ceil(totalRecords / limit),
+                },
+            },
+        });
+    }
+    catch (error) {
+        console.error('[API:Admin:Attendance:GET] Error:', error);
+        return res.status(500).json({ success: false, error: 'Failed to fetch attendance records' });
+    }
+});
+
+router.patch('/attendance', async (req, res) => {
+    try {
+        await connectToDatabase();
+        const { attendanceId, status, checkIn, checkOut, reason } = req.body;
+        if (!attendanceId) {
+            return res.status(400).json({ success: false, error: 'Attendance ID is required' });
+        }
+        let record = await Attendance.findById(attendanceId);
+        if (!record) {
+            const user = await User.findById(attendanceId).lean();
+            if (user) {
+                const todayStr = getTodayDateString();
+                record = await Attendance.create({
+                    employeeId: user.employeeId,
+                    date: todayStr,
+                    status: status || 'PRESENT',
+                    checkIn: checkIn ? new Date(checkIn) : new Date(),
+                    checkOut: checkOut ? new Date(checkOut) : null,
+                });
+            } else {
+                return res.status(404).json({ success: false, error: 'Attendance record not found' });
+            }
+        } else {
+            if (status) record.status = status;
+            if (checkIn !== undefined) record.checkIn = checkIn ? new Date(checkIn) : null;
+            if (checkOut !== undefined) record.checkOut = checkOut ? new Date(checkOut) : null;
+            if (record.checkIn && record.checkOut) {
+                const diffMs = record.checkOut.getTime() - record.checkIn.getTime();
+                record.totalWorkingMinutes = Math.max(0, Math.floor(diffMs / 60000) - (record.totalBreakMinutes || 0));
+            }
+            await record.save();
+        }
+
+        await logAuditEvent({
+            actorId: req.user.userId,
+            actorName: req.user.name,
+            actorRole: req.user.role,
+            action: 'ATTENDANCE_MANUAL_CORRECTION',
+            targetId: record._id.toString(),
+            targetType: 'ATTENDANCE',
+            metadata: { reason, status, checkIn, checkOut },
+            ipAddress: req.ip,
+        });
+
+        return res.json({ success: true, message: 'Attendance record updated successfully', data: record });
+    }
+    catch (error) {
+        console.error('[API:Admin:Attendance:PATCH] Error:', error);
+        return res.status(500).json({ success: false, error: 'Failed to update attendance record' });
+    }
+});
+
+router.patch('/attendance/correction/:id', async (req, res) => {
+    try {
+        await connectToDatabase();
+        const { id } = req.params;
+        const { decision, reviewNotes } = req.body;
+        const record = await Attendance.findById(id);
+        if (!record || !record.correction) {
+            return res.status(404).json({ success: false, error: 'Attendance correction request not found' });
+        }
+        record.correction.status = decision === 'APPROVE' ? 'APPROVED' : 'REJECTED';
+        record.correction.reviewedBy = req.user.name;
+        record.correction.reviewedAt = new Date();
+        record.correction.reviewNotes = reviewNotes || '';
+
+        if (decision === 'APPROVE') {
+            if (record.correction.requestedCheckIn) {
+                record.checkIn = record.correction.requestedCheckIn;
+            }
+            if (record.correction.requestedCheckOut) {
+                record.checkOut = record.correction.requestedCheckOut;
+            }
+            record.status = record.checkOut ? 'COMPLETED' : 'PRESENT';
+            if (record.checkIn && record.checkOut) {
+                const diffMs = new Date(record.checkOut).getTime() - new Date(record.checkIn).getTime();
+                record.totalWorkingMinutes = Math.max(0, Math.floor(diffMs / 60000) - (record.totalBreakMinutes || 0));
+            }
+        }
+        await record.save();
+
+        await logAuditEvent({
+            actorId: req.user.userId,
+            actorName: req.user.name,
+            actorRole: req.user.role,
+            action: `ATTENDANCE_CORRECTION_${decision}`,
+            targetId: record._id.toString(),
+            targetType: 'ATTENDANCE',
+            metadata: { decision, reviewNotes },
+            ipAddress: req.ip,
+        });
+
+        return res.json({ success: true, message: `Correction request ${decision === 'APPROVE' ? 'approved' : 'rejected'}` });
+    }
+    catch (error) {
+        console.error('[API:Admin:Attendance:Correction] Error:', error);
+        return res.status(500).json({ success: false, error: 'Failed to process correction request' });
+    }
+});
+
+router.post('/test-email', async (req, res) => {
+    try {
+        const { toEmail } = req.body || {};
+        const recipient = toEmail || req.user?.email || process.env.ADMIN_EMAIL || process.env.SMTP_USER;
+        const result = await sendEmail({
+            to: recipient,
+            subject: 'BP AMS System - Email Delivery Test',
+            text: `This is a test notification dispatched by ${req.user.name} on ${new Date().toLocaleString()}. If you received this, SMTP email is working correctly.`,
+            html: `
+                <div style="font-family: sans-serif; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; max-width: 500px;">
+                    <h3 style="color: #2563eb; margin: 0 0 12px 0;">BP AMS Email Verification</h3>
+                    <p style="color: #334155; margin: 0 0 16px 0;">This email confirms that the notification transport configured in BP AMS is communicating successfully with Gmail SMTP.</p>
+                    <p style="font-size: 12px; color: #64748b; margin: 0;">Dispatched by: <strong>${req.user.name}</strong> (${req.user.role})<br>Timestamp: ${new Date().toISOString()}</p>
+                </div>
+            `,
+        });
+        if (result.success) {
+            return res.json({ success: true, message: `Test email successfully delivered to ${recipient}` });
+        } else {
+            return res.status(500).json({ success: false, error: result.error });
+        }
+    }
+    catch (error) {
+        return res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 router.get('/audit-logs', async (req, res) => {
     try {
         await connectToDatabase();

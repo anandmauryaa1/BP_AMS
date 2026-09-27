@@ -7,10 +7,23 @@ const ChannelSchema = new Schema({
     channelUrl: { type: String, trim: true },
     description: { type: String, trim: true },
     status: { type: String, enum: ['ACTIVE', 'INACTIVE'], default: 'ACTIVE' },
+    isActive: { type: Boolean, default: true },
     defaultTimezone: { type: String, default: 'UTC' },
     branding: {
         color: { type: String, default: '#E11D48' },
         avatarUrl: { type: String },
     },
 }, { timestamps: true });
-export const Channel = mongoose.models.Channel || mongoose.model('Channel', ChannelSchema);
+
+ChannelSchema.pre('validate', function(next) {
+    if (this.isActive === undefined && this.status) {
+        this.isActive = this.status !== 'INACTIVE';
+    }
+    if (this.status === undefined && this.isActive !== undefined) {
+        this.status = this.isActive ? 'ACTIVE' : 'INACTIVE';
+    }
+    if (typeof next === 'function') next();
+});
+
+if (mongoose.models?.Channel) delete mongoose.models.Channel;
+export const Channel = mongoose.model('Channel', ChannelSchema);

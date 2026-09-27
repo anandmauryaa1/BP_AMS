@@ -58,8 +58,14 @@ export async function sendEmail(options) {
         return { success: true, messageId: info.messageId };
     }
     catch (error) {
-        console.error('[EMAIL_SEND_FAILED] Error sending email to', options.to, ':', error?.message);
-        return { success: false, error: error?.message || 'Failed to send email' };
+        let errorMsg = error?.message || 'Failed to send email';
+        if (errorMsg.includes('534-5.7.9') || errorMsg.includes('WebLoginRequired')) {
+            errorMsg = `Gmail SMTP Authentication Blocked (534-5.7.9): Google flagged this server sign-in. To fix: (1) Visit https://accounts.google.com/DisplayUnlockCaptcha while signed into ${process.env.SMTP_USER} and click Continue, or (2) Generate a fresh 16-character App Password at https://myaccount.google.com/apppasswords and update SMTP_PASSWORD.`;
+        } else if (errorMsg.includes('535-5.7.8') || errorMsg.includes('BadCredentials') || errorMsg.includes('Username and Password not accepted')) {
+            errorMsg = `Gmail SMTP Authentication Failed (535-5.7.8): Please ensure 2-Step Verification is enabled on ${process.env.SMTP_USER}, then generate a 16-character Google App Password at https://myaccount.google.com/apppasswords.`;
+        }
+        console.error('[EMAIL_SEND_FAILED] Error sending email to', options.to, ':', errorMsg);
+        return { success: false, error: errorMsg };
     }
 }
 

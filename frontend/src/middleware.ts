@@ -34,7 +34,13 @@ export async function middleware(req: NextRequest) {
   }
 
   const isPublicRoute = PUBLIC_ROUTES.some((route) => pathname.startsWith(route));
-  const token = req.cookies.get(AUTH_COOKIE_NAME)?.value;
+  let token = req.cookies.get(AUTH_COOKIE_NAME)?.value;
+  if (!token) {
+    const authHeader = req.headers.get('authorization');
+    if (authHeader?.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+    }
+  }
 
   let session: any = null;
 

@@ -62,35 +62,38 @@ export default function EmployeeDashboard() {
 
   const fetchDashboardData = useCallback(async () => {
     try {
+      const token = typeof window !== 'undefined' ? (localStorage.getItem('auth_token') || localStorage.getItem('token')) : null;
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
       // 1. Fetch user info
-      const meRes = await fetch('/api/auth/me');
+      const meRes = await fetch('/api/auth/me', { credentials: 'include', headers });
       const meData = await meRes.json();
       if (meData.success) {
         setUser(meData.data);
       }
 
       // 2. Fetch attendance state
-      const attRes = await fetch('/api/attendance/today');
+      const attRes = await fetch('/api/attendance/today', { credentials: 'include', headers });
       const attData = await attRes.json();
-      if (attData.success) {
-        setAttendance(attData.data.attendance);
+      if (attData.success && attData.data) {
+        setAttendance(attData.data.attendance || attData.data);
         if (attData.data.liveStats) {
           setLiveStats(attData.data.liveStats);
         }
       }
 
       // 3. Fetch current work session & active projects
-      const wsRes = await fetch('/api/work-sessions/current');
+      const wsRes = await fetch('/api/work-sessions/current', { credentials: 'include', headers });
       const wsData = await wsRes.json();
-      if (wsData.success) {
+      if (wsData.success && wsData.data) {
         setCurrentWorkSession(wsData.data.currentSession || null);
         setActiveProjects(wsData.data.activeProjects || []);
       }
 
       // 4. Fetch daily plan queue & tasks
-      const planRes = await fetch('/api/plans/daily');
+      const planRes = await fetch('/api/plans/daily', { credentials: 'include', headers });
       const planData = await planRes.json();
-      if (planData.success) {
+      if (planData.success && planData.data) {
         setMyQueue(planData.data.myQueue || []);
         setMyTasksToday(planData.data.myTasksToday || []);
       }

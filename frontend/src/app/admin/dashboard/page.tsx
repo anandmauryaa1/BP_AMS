@@ -61,21 +61,44 @@ export default function AdminDashboardPage() {
 
   const fetchDashboardData = useCallback(async () => {
     try {
-      const meRes = await fetch('/api/auth/me');
+      const token = typeof window !== 'undefined' ? (localStorage.getItem('auth_token') || localStorage.getItem('token')) : null;
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
+      const meRes = await fetch('/api/auth/me', { credentials: 'include', headers });
       const meData = await meRes.json();
       if (meData.success) setCurrentUser(meData.data);
 
-      const res = await fetch('/api/admin/reports');
+      const res = await fetch('/api/admin/reports', { credentials: 'include', headers });
       const data = await res.json();
       if (data.success && data.data) {
         if (data.data.dashboardMetrics) setMetrics(data.data.dashboardMetrics);
         if (data.data.productionMetrics) setProdMetrics(data.data.productionMetrics);
       }
 
-      const attRes = await fetch(`/api/admin/attendance?date=${getTodayDateString()}`);
+      const attRes = await fetch(`/api/admin/attendance?date=${getTodayDateString()}`, { credentials: 'include', headers });
       const attData = await attRes.json();
-      if (attData.success) {
-        setRecords(attData.data.records || []);
+      if (attData.success && attData.data) {
+        const fetchedRecords = attData.data.records || [];
+        setRecords(fetchedRecords);
+
+        // Fallback / sync live dynamic calculations if reports endpoint had zero counts
+        if (fetchedRecords.length > 0) {
+          const present = fetchedRecords.filter((r: any) => ['PRESENT', 'ON_BREAK', 'COMPLETED'].includes(r.status)).length;
+          const working = fetchedRecords.filter((r: any) => r.status === 'PRESENT').length;
+          const onBreak = fetchedRecords.filter((r: any) => r.status === 'ON_BREAK').length;
+          const completed = fetchedRecords.filter((r: any) => r.status === 'COMPLETED').length;
+          const total = fetchedRecords.length;
+
+          setMetrics((prev) => ({
+            totalEmployees: prev.totalEmployees > 0 ? prev.totalEmployees : total,
+            presentToday: prev.presentToday > 0 ? prev.presentToday : present,
+            absentToday: prev.absentToday > 0 ? prev.absentToday : Math.max(0, total - present),
+            currentlyWorking: prev.currentlyWorking > 0 ? prev.currentlyWorking : working,
+            currentlyOnBreak: prev.currentlyOnBreak > 0 ? prev.currentlyOnBreak : onBreak,
+            completedAttendance: prev.completedAttendance > 0 ? prev.completedAttendance : completed,
+            pendingCorrectionsCount: prev.pendingCorrectionsCount,
+          }));
+        }
       }
     } catch (err) {
       console.error('Error fetching admin overview data:', err);

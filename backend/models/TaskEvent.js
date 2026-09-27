@@ -15,7 +15,6 @@ const TaskEventSchema = new Schema({
     projectId: {
         type: Schema.Types.ObjectId,
         ref: 'Project',
-        required: [true, 'Project ID is required'],
         index: true,
     },
     eventType: {

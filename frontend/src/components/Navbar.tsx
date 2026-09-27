@@ -55,7 +55,11 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
     } else {
       if (user) setCurrentUser(user);
       setIsLoadingSession(true);
-      fetch('/api/auth/me')
+      const token = typeof window !== 'undefined' ? (localStorage.getItem('auth_token') || localStorage.getItem('token')) : null;
+      fetch('/api/auth/me', {
+        credentials: 'include',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
         .then((res) => res.json())
         .then((data) => {
           if (data.success && data.data) {
@@ -95,12 +99,20 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
   // Fetch notifications
   useEffect(() => {
     if (currentUser) {
-      fetch('/api/notifications')
+      const token = typeof window !== 'undefined' ? (localStorage.getItem('auth_token') || localStorage.getItem('token')) : null;
+      fetch('/api/notifications', {
+        credentials: 'include',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
         .then((res) => res.json())
         .then((data) => {
           if (data.success && data.data) {
-            setNotifications(data.data.notifications || []);
-            setUnreadCount(data.data.unreadCount || 0);
+            const list = Array.isArray(data.data) ? data.data : (data.data.notifications || []);
+            const unread = typeof data.data.unreadCount === 'number'
+              ? data.data.unreadCount
+              : list.filter((n: any) => !n.read && !n.isRead).length;
+            setNotifications(list);
+            setUnreadCount(unread);
           }
         })
         .catch(() => {});
@@ -110,7 +122,12 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
   const markNotificationsAsRead = async () => {
     setShowNotifications(!showNotifications);
     if (unreadCount > 0) {
-      await fetch('/api/notifications', { method: 'PATCH' });
+      const token = typeof window !== 'undefined' ? (localStorage.getItem('auth_token') || localStorage.getItem('token')) : null;
+      await fetch('/api/notifications', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       setUnreadCount(0);
     }
   };
@@ -118,7 +135,16 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
   const handleLogout = async () => {
     setIsLoggingOut(true);
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('token');
+      }
+      const token = typeof window !== 'undefined' ? (localStorage.getItem('auth_token') || localStorage.getItem('token')) : null;
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       router.push('/login');
       router.refresh();
     } catch (err) {

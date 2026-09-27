@@ -48,16 +48,23 @@ export default function AdminLeavesPage() {
   const fetchLeaves = async () => {
     try {
       setLoading(true);
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+      const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
       const [leaveRes, empRes] = await Promise.all([
-        fetch('/api/leaves'),
-        fetch('/api/admin/employees'),
+        fetch('/api/leaves', { headers: authHeaders, credentials: 'include' }),
+        fetch('/api/admin/employees', { headers: authHeaders, credentials: 'include' }),
       ]);
 
       const leaveData = await leaveRes.json();
       const empData = await empRes.json();
 
-      const foundLeaves = leaveData.data?.leaves || leaveData.leaves || [];
-      const foundEmps = empData.data?.employees || empData.employees || [];
+      const foundLeaves = Array.isArray(leaveData.data)
+        ? leaveData.data
+        : (leaveData.data?.leaves || leaveData.leaves || []);
+      const foundEmps = Array.isArray(empData.data)
+        ? empData.data
+        : (empData.data?.employees || empData.employees || []);
 
       setLeaves(foundLeaves);
       setEmployees(foundEmps);
@@ -75,9 +82,13 @@ export default function AdminLeavesPage() {
   const handleAction = async (leaveId: string, status: 'APPROVED' | 'REJECTED') => {
     try {
       setActionLoading(leaveId);
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+      const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
       const res = await fetch(`/api/leaves/${leaveId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        credentials: 'include',
         body: JSON.stringify({ status, reviewNotes }),
       });
       const data = await res.json();
@@ -111,13 +122,20 @@ export default function AdminLeavesPage() {
     setSaving(true);
     setError(null);
     try {
-      const selectedEmp = employees.find((emp) => emp._id === applyForm.employeeId);
+      const selectedEmp = employees.find((emp) => emp._id === applyForm.employeeId || emp.employeeId === applyForm.employeeId);
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+      const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
       const res = await fetch('/api/leaves', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        credentials: 'include',
         body: JSON.stringify({
           ...applyForm,
+          leaveType: applyForm.type,
+          type: applyForm.type,
           employeeId: selectedEmp?.employeeId || applyForm.employeeId,
+          employeeName: selectedEmp?.name,
         }),
       });
 
@@ -143,11 +161,11 @@ export default function AdminLeavesPage() {
 
   const filteredLeaves = leaves.filter((l) => {
     if (filter !== 'ALL' && l.status !== filter) return false;
-    if (typeFilter !== 'ALL' && l.type !== typeFilter) return false;
+    if (typeFilter !== 'ALL' && l.type !== typeFilter && l.leaveType !== typeFilter) return false;
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      const empName = l.userId?.name?.toLowerCase() || '';
+      const empName = (l.userId?.name || l.employeeName || '').toLowerCase();
       const empId = (l.userId?.employeeId || l.employeeId || '').toLowerCase();
       const reason = l.reason?.toLowerCase() || '';
       if (!empName.includes(q) && !empId.includes(q) && !reason.includes(q)) return false;
@@ -305,7 +323,7 @@ export default function AdminLeavesPage() {
                       ({leave.userId?.employeeId || leave.employeeId})
                     </span>
                     <span className="text-xs px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-zinc-400 font-mono font-medium">
-                      {leave.type}
+                      {leave.leaveType || leave.type}
                     </span>
                     <span
                       className={`text-[10px] font-bold px-2 py-0.5 rounded border ${

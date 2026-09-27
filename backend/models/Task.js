@@ -1,24 +1,27 @@
 import mongoose, { Schema } from 'mongoose';
 const TaskSchema = new Schema({
-    taskId: { type: String, required: [true, 'Task ID is required'], unique: true, uppercase: true, trim: true, index: true },
-    projectId: { type: Schema.Types.ObjectId, ref: 'Project', required: [true, 'Project ID is required'], index: true },
+    taskId: {
+        type: String,
+        unique: true,
+        uppercase: true,
+        trim: true,
+        index: true,
+        default: () => 'TSK-' + Date.now().toString(36).toUpperCase() + '-' + Math.floor(100 + Math.random() * 900),
+    },
+    projectId: { type: Schema.Types.ObjectId, ref: 'Project', index: true },
     deliverableId: { type: Schema.Types.ObjectId, ref: 'Deliverable', index: true },
     title: { type: String, required: [true, 'Task title is required'], trim: true },
     taskType: {
         type: String,
-        enum: [
-            'RESEARCH', 'SCRIPT', 'SCRIPT_REVIEW', 'PRE_PRODUCTION', 'SHOOT_PREPARATION',
-            'CAMERA', 'AUDIO', 'SHOOT', 'FOOTAGE_BACKUP', 'VIDEO_EDIT', 'SHORT_FORM_EDIT',
-            'COLOR', 'AUDIO_MIX', 'MOTION_GRAPHICS', 'THUMBNAIL', 'TITLE', 'DESCRIPTION',
-            'SEO', 'SOCIAL_COPY', 'INTERNAL_REVIEW', 'REVISION', 'APPROVAL', 'SCHEDULING', 'PUBLISH'
-        ],
+        trim: true,
+        uppercase: true,
         default: 'VIDEO_EDIT',
         index: true,
     },
     description: { type: String, trim: true },
-    assignedTo: { type: Schema.Types.ObjectId, ref: 'User', required: [true, 'Assignee is required'], index: true },
+    assignedTo: { type: Schema.Types.ObjectId, ref: 'User', index: true },
     assignedToName: { type: String },
-    assignedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    assignedBy: { type: Schema.Types.ObjectId, ref: 'User' },
     assignedByName: { type: String },
     status: {
         type: String,

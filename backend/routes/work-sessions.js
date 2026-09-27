@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { connectToDatabase } from '../db.js';
 import { WorkSession } from '../models/WorkSession.js';
 import { Task } from '../models/Task.js';
+import { Attendance } from '../models/Attendance.js';
+import { getTodayDateString } from '../utils/index.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { recordTaskEvent } from '../services/events.js';
 const router = Router();
@@ -44,8 +46,16 @@ router.post('/start', async (req, res) => {
             openSession.durationMinutes = mins;
             await openSession.save();
         }
+        let attendanceId = req.body.attendanceId;
+        if (!attendanceId) {
+            const todayStr = getTodayDateString();
+            const att = await Attendance.findOne({ employeeId, date: todayStr });
+            if (att) attendanceId = att._id.toString();
+        }
         const newSession = await WorkSession.create({
             employeeId,
+            employeeName: req.user?.name,
+            attendanceId,
             projectId,
             taskId: taskId || undefined,
             projectTitle: projectTitle || 'Project Session',

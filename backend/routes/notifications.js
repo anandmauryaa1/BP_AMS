@@ -52,9 +52,10 @@ router.post('/unsubscribe', async (req, res) => {
 });
 router.post('/test', async (req, res) => {
     try {
+        const userName = req.user?.name || req.user?.username || 'User';
         await notifyUser(req.user.userId, {
             title: '🔔 Push Notifications Active',
-            message: `Test notification for ${req.user.name}. You will now receive instant task and shift updates!`,
+            message: `Test notification for ${userName}. You will now receive instant task and shift updates!`,
             type: 'TASK_ASSIGNED',
             link: '/dashboard',
         });
@@ -71,13 +72,32 @@ router.post('/test', async (req, res) => {
 router.get('/', async (req, res) => {
     try {
         await connectToDatabase();
-        const notifications = await Notification.find({
-            userId: req.user?.userId,
-        })
+        const userId = req.user?.userId;
+        const employeeId = req.user?.employeeId;
+        const queryOr = [];
+        if (userId) queryOr.push({ userId: String(userId) });
+        if (employeeId) queryOr.push({ userId: String(employeeId) });
+
+        const filter = queryOr.length > 0 ? { $or: queryOr } : {};
+        const rawNotifications = await Notification.find(filter)
             .sort({ createdAt: -1 })
             .limit(50)
             .lean();
-        return res.json({ success: true, data: notifications });
+
+        const notifications = rawNotifications.map((n) => ({
+            ...n,
+            read: Boolean(n.read || n.isRead),
+            isRead: Boolean(n.read || n.isRead),
+        }));
+        const unreadCount = notifications.filter((n) => !n.read).length;
+
+        return res.json({
+            success: true,
+            data: {
+                notifications,
+                unreadCount,
+            },
+        });
     }
     catch (error) {
         console.error('[API:Notifications:GET] Error:', error);
@@ -87,7 +107,14 @@ router.get('/', async (req, res) => {
 const markAllRead = async (req, res) => {
     try {
         await connectToDatabase();
-        await Notification.updateMany({ userId: req.user?.userId, isRead: false }, { isRead: true });
+        const userId = req.user?.userId;
+        const employeeId = req.user?.employeeId;
+        const queryOr = [];
+        if (userId) queryOr.push({ userId: String(userId) });
+        if (employeeId) queryOr.push({ userId: String(employeeId) });
+
+        const filter = queryOr.length > 0 ? { $or: queryOr } : {};
+        await Notification.updateMany(filter, { $set: { read: true, isRead: true } });
         return res.json({ success: true, message: 'All notifications marked as read' });
     }
     catch (error) {
@@ -96,11 +123,17 @@ const markAllRead = async (req, res) => {
     }
 };
 router.put('/read-all', markAllRead);
+router.patch('/read-all', markAllRead);
+router.post('/read-all', markAllRead);
 router.patch('/', markAllRead);
 router.put('/:id/read', async (req, res) => {
     try {
         await connectToDatabase();
-        const updated = await Notification.findOneAndUpdate({ _id: req.params.id, userId: req.user?.userId }, { isRead: true }, { new: true });
+        const updated = await Notification.findOneAndUpdate(
+            { _id: req.params.id },
+            { $set: { read: true, isRead: true } },
+            { new: true }
+        );
         return res.json({ success: true, data: updated });
     }
     catch (error) {

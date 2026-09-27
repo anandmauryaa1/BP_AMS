@@ -1,9 +1,16 @@
 import mongoose, { Schema } from 'mongoose';
 const DeliverableSchema = new Schema({
-    deliverableId: { type: String, required: [true, 'Deliverable ID is required'], unique: true, uppercase: true, trim: true, index: true },
+    deliverableId: { 
+        type: String, 
+        uppercase: true, 
+        trim: true, 
+        index: true,
+        unique: true,
+        default: () => 'DEL-' + Date.now().toString(36).toUpperCase() + '-' + Math.floor(100 + Math.random() * 900),
+    },
     projectId: { type: Schema.Types.ObjectId, ref: 'Project', required: [true, 'Project ID is required'], index: true },
-    channelId: { type: Schema.Types.ObjectId, ref: 'Channel', required: [true, 'Channel ID is required'], index: true },
-    platform: { type: String, enum: ['YOUTUBE', 'INSTAGRAM', 'FACEBOOK', 'OTHER'], required: true, index: true },
+    channelId: { type: Schema.Types.ObjectId, ref: 'Channel', index: true },
+    platform: { type: String, default: 'YOUTUBE', uppercase: true, trim: true, index: true },
     format: { type: String, enum: ['FULL_VIDEO', 'SHORT_VIDEO', 'REEL', 'POST', 'CAROUSEL', 'STORY', 'OTHER'], default: 'FULL_VIDEO', index: true },
     title: { type: String, required: [true, 'Deliverable title is required'], trim: true },
     caption: { type: String, trim: true },
@@ -16,7 +23,7 @@ const DeliverableSchema = new Schema({
     publishedUrl: { type: String },
     status: {
         type: String,
-        enum: ['PLANNED', 'IN_PRODUCTION', 'READY_FOR_REVIEW', 'REVISION', 'APPROVED', 'SCHEDULED', 'PUBLISHED', 'CANCELLED'],
+        enum: ['PLANNED', 'IN_PRODUCTION', 'READY_FOR_REVIEW', 'NEEDS_REVIEW', 'REVISION', 'APPROVED', 'SCHEDULED', 'PUBLISHED', 'CANCELLED'],
         default: 'PLANNED',
         index: true,
     },

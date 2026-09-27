@@ -168,4 +168,38 @@ router.get('/all', requireManagerOrAdmin, async (req, res) => {
         return res.status(500).json({ success: false, error: 'Failed to fetch attendance dashboard data' });
     }
 });
+
+router.post('/correction', async (req, res) => {
+    try {
+        await connectToDatabase();
+        const { attendanceId, reason, requestedCheckIn, requestedCheckOut } = req.body;
+        if (!attendanceId || !reason) {
+            return res.status(400).json({ success: false, message: 'Attendance ID and correction reason are required' });
+        }
+        const attendance = await Attendance.findById(attendanceId);
+        if (!attendance) {
+            return res.status(404).json({ success: false, message: 'Attendance record not found' });
+        }
+        if (req.user?.role === 'EMPLOYEE' && attendance.employeeId !== req.user?.employeeId && attendance.employeeId !== req.user?.userId) {
+            return res.status(403).json({ success: false, message: 'Forbidden: Cannot submit correction for other employees' });
+        }
+        attendance.correction = {
+            requestedAt: new Date(),
+            requestedCheckIn: requestedCheckIn ? new Date(requestedCheckIn) : undefined,
+            requestedCheckOut: requestedCheckOut ? new Date(requestedCheckOut) : undefined,
+            reason: String(reason).trim(),
+            status: 'PENDING',
+        };
+        await attendance.save();
+        return res.json({
+            success: true,
+            message: 'Correction request submitted for Admin review',
+            data: attendance,
+        });
+    } catch (error) {
+        console.error('[API:Attendance:Correction] Error:', error);
+        return res.status(500).json({ success: false, message: 'Failed to submit correction request' });
+    }
+});
+
 export default router;

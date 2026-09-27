@@ -49,6 +49,9 @@ export default function AdminTasksPage() {
   const fetchTasks = async () => {
     try {
       setLoading(true);
+      const token = typeof window !== 'undefined' ? (localStorage.getItem('auth_token') || localStorage.getItem('token')) : null;
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
       let url = '/api/tasks';
       const params = new URLSearchParams();
       if (statusFilter !== 'ALL') params.append('status', statusFilter);
@@ -56,7 +59,7 @@ export default function AdminTasksPage() {
       if (projectFilter !== 'ALL') params.append('projectId', projectFilter);
       if (params.toString()) url += `?${params.toString()}`;
 
-      const res = await fetch(url);
+      const res = await fetch(url, { credentials: 'include', headers });
       const data = await res.json();
       const list = data.data?.tasks || data.tasks || (Array.isArray(data.data) ? data.data : []);
       setTasks(list);
@@ -69,14 +72,17 @@ export default function AdminTasksPage() {
 
   const fetchMeta = async () => {
     try {
+      const token = typeof window !== 'undefined' ? (localStorage.getItem('auth_token') || localStorage.getItem('token')) : null;
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
       const [projRes, empRes] = await Promise.all([
-        fetch('/api/projects'),
-        fetch('/api/admin/employees'),
+        fetch('/api/projects', { credentials: 'include', headers }),
+        fetch('/api/admin/employees', { credentials: 'include', headers }),
       ]);
       const projData = await projRes.json();
       const empData = await empRes.json();
-      const projList = projData.data?.projects || projData.projects || [];
-      const empList = empData.data?.employees || empData.employees || [];
+      const projList = projData.data?.projects || projData.projects || (Array.isArray(projData.data) ? projData.data : []);
+      const empList = empData.data?.employees || empData.employees || (Array.isArray(empData.data) ? empData.data : []);
       setProjects(projList);
       setEmployees(empList);
     } catch (err) {
@@ -97,6 +103,8 @@ export default function AdminTasksPage() {
     setSaving(true);
     setError(null);
     try {
+      const token = typeof window !== 'undefined' ? (localStorage.getItem('auth_token') || localStorage.getItem('token')) : null;
+
       const payload: any = {
         projectId: form.projectId || undefined,
         title: form.title.trim(),
@@ -112,7 +120,11 @@ export default function AdminTasksPage() {
 
       const res = await fetch('/api/tasks', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: 'include',
         body: JSON.stringify(payload),
       });
 
@@ -142,9 +154,14 @@ export default function AdminTasksPage() {
 
   const handleUpdateStatus = async (taskId: string, newStatus: string) => {
     try {
+      const token = typeof window !== 'undefined' ? (localStorage.getItem('auth_token') || localStorage.getItem('token')) : null;
       const res = await fetch(`/api/tasks/${taskId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: 'include',
         body: JSON.stringify({ status: newStatus }),
       });
       if (res.ok) {
@@ -282,7 +299,7 @@ export default function AdminTasksPage() {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-semibold text-slate-900 dark:text-zinc-100 text-sm">{task.title}</span>
                     <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-[10px] font-mono text-slate-700 dark:text-zinc-400 font-medium">
-                      {task.type.replace(/_/g, ' ')}
+                      {(task.type || task.taskType || 'TASK').replace(/_/g, ' ')}
                     </span>
                     {task.priority === 'URGENT' && (
                       <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-500/20 text-red-500 dark:text-red-400">

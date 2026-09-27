@@ -35,14 +35,18 @@ export default function EmployeeLeavesPage() {
   const fetchLeaves = useCallback(async () => {
     setIsLoading(true);
     try {
-      const meRes = await fetch('/api/auth/me');
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+      const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
+      const meRes = await fetch('/api/auth/me', { headers: authHeaders, credentials: 'include' });
       const meData = await meRes.json();
       if (meData.success) setUser(meData.data);
 
-      const res = await fetch('/api/leaves');
+      const res = await fetch('/api/leaves', { headers: authHeaders, credentials: 'include' });
       const data = await res.json();
       if (data.success) {
-        setLeaves(data.data.leaves || []);
+        const found = Array.isArray(data.data) ? data.data : (data.data?.leaves || data.leaves || []);
+        setLeaves(found);
       }
     } catch (err) {
       console.error('Error fetching leaves:', err);
@@ -60,15 +64,23 @@ export default function EmployeeLeavesPage() {
     setIsSubmitting(true);
 
     try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+      const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
       const res = await fetch('/api/leaves', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        credentials: 'include',
+        body: JSON.stringify({
+          ...form,
+          leaveType: form.leaveType,
+          type: form.leaveType,
+        }),
       });
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        showToast(data.message || 'Failed to submit leave request', 'error');
+        showToast(data.message || data.error || 'Failed to submit leave request', 'error');
       } else {
         showToast('Leave request submitted for review', 'success');
         setIsApplyModalOpen(false);

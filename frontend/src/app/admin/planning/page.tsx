@@ -60,12 +60,18 @@ export default function AdminPlanningPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const getAuthHeaders = (): Record<string, string> => {
+    const token = typeof window !== 'undefined' ? (localStorage.getItem('auth_token') || localStorage.getItem('token')) : null;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   const fetchMeta = async () => {
     try {
+      const authHeaders = getAuthHeaders();
       const [chanRes, empRes, taskRes] = await Promise.all([
-        fetch('/api/channels'),
-        fetch('/api/admin/employees'),
-        fetch('/api/tasks'),
+        fetch('/api/channels', { headers: authHeaders, credentials: 'include' }),
+        fetch('/api/admin/employees', { headers: authHeaders, credentials: 'include' }),
+        fetch('/api/tasks', { headers: authHeaders, credentials: 'include' }),
       ]);
       const chanData = await chanRes.json();
       const empData = await empRes.json();
@@ -87,7 +93,10 @@ export default function AdminPlanningPage() {
   const fetchDailyPlans = async () => {
     try {
       setDailyLoading(true);
-      const res = await fetch(`/api/plans/daily?date=${selectedDate}`);
+      const res = await fetch(`/api/plans/daily?date=${selectedDate}`, {
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
       const data = await res.json();
       const plans = data.data?.dailyPlans || data.dailyPlans || [];
       setDailyPlans(plans);
@@ -101,7 +110,10 @@ export default function AdminPlanningPage() {
   const fetchWeeklyPlans = async () => {
     try {
       setWeeklyLoading(true);
-      const res = await fetch('/api/plans/weekly');
+      const res = await fetch('/api/plans/weekly', {
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
       const data = await res.json();
       const plans = data.data?.weeklyPlans || data.weeklyPlans || [];
       setWeeklyPlans(plans);
@@ -115,7 +127,10 @@ export default function AdminPlanningPage() {
   const fetchMonthlyPlans = async () => {
     try {
       setMonthlyLoading(true);
-      const res = await fetch('/api/plans/monthly');
+      const res = await fetch('/api/plans/monthly', {
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
       const data = await res.json();
       const plans = data.data?.monthlyPlans || data.monthlyPlans || [];
       setMonthlyPlans(plans);
@@ -143,7 +158,8 @@ export default function AdminPlanningPage() {
     try {
       const res = await fetch('/api/plans/daily', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        credentials: 'include',
         body: JSON.stringify(dailyForm),
       });
       const data = await res.json();
@@ -180,7 +196,8 @@ export default function AdminPlanningPage() {
 
       const res = await fetch('/api/plans/monthly', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        credentials: 'include',
         body: JSON.stringify(payload),
       });
       const data = await res.json();

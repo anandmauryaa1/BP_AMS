@@ -1,7 +1,7 @@
 import mongoose, { Schema } from 'mongoose';
 const LocationSchema = new Schema({
-    latitude: { type: Number, required: true },
-    longitude: { type: Number, required: true },
+    latitude: { type: Number },
+    longitude: { type: Number },
     accuracy: { type: Number },
     address: { type: String },
 }, { _id: false });

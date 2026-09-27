@@ -1,6 +1,14 @@
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
+export function getAuthToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  const local = localStorage.getItem('auth_token') || localStorage.getItem('token');
+  if (local) return local;
+  const match = document.cookie.match(/(?:^|;\s*)auth_token=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 export interface ApiFetchOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>;
 }
@@ -11,9 +19,14 @@ export async function apiFetch<T = any>(
 ): Promise<{ success: boolean; data?: T; error?: string; message?: string }> {
   const { params, headers, ...customConfig } = options;
 
-  let url = endpoint.startsWith('http')
-    ? endpoint
-    : `${API_BASE_URL}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+  let url = endpoint;
+  if (!endpoint.startsWith('http')) {
+    // In browser, keep relative /api/... path so Next.js proxy rewrite handles it cleanly without CORS/cross-origin cookie loss
+    const isBrowser = typeof window !== 'undefined';
+    if (!isBrowser) {
+      url = `${API_BASE_URL}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+    }
+  }
 
   if (params) {
     const searchParams = new URLSearchParams();
@@ -28,13 +41,15 @@ export async function apiFetch<T = any>(
     }
   }
 
+  const token = getAuthToken();
   const defaultHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 
   const config: RequestInit = {
     method: 'GET',
-    credentials: 'include', // Ensure cookies are attached for http://localhost:5000 CORS
+    credentials: 'include', // Ensure cookies are attached
     headers: {
       ...defaultHeaders,
       ...headers,

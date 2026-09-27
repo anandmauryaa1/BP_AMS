@@ -64,6 +64,12 @@ export default function LoginPage() {
 
       const token = data.data?.token;
       if (token) {
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem('auth_token', token);
+            localStorage.setItem('token', token);
+          } catch {}
+        }
         const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
         document.cookie = `auth_token=${token}; path=/; max-age=28800; SameSite=Lax${isHttps ? '; Secure' : ''}`;
       }

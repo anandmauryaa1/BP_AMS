@@ -2,7 +2,7 @@ import mongoose, { Schema } from 'mongoose';
 const WorkSessionSchema = new Schema({
     employeeId: { type: String, required: [true, 'Employee ID is required'], index: true },
     employeeName: { type: String },
-    attendanceId: { type: String, required: [true, 'Attendance ID is required'], index: true },
+    attendanceId: { type: String, index: true },
     projectId: { type: Schema.Types.ObjectId, ref: 'Project', required: [true, 'Project ID is required'], index: true },
     projectTitle: { type: String },
     deliverableId: { type: Schema.Types.ObjectId, ref: 'Deliverable' },

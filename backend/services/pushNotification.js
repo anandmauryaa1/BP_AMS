@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import webpush from 'web-push';
 import { PushSubscription } from '../models/PushSubscription.js';
 import { Notification } from '../models/Notification.js';
@@ -83,12 +84,18 @@ async function sendToSubscription(sub, payload) {
  * Send in-app notification & Web Push to a specific user (by userId or employeeId)
  */
 export async function notifyUser(userIdOrEmployeeId, notification) {
+    if (!userIdOrEmployeeId) return;
     await connectToDatabase();
-    // 1. Resolve user ID and employee ID
-    const user = await User.findOne({
-        $or: [{ _id: userIdOrEmployeeId }, { employeeId: userIdOrEmployeeId }],
-    }).lean();
-    const targetUserId = user ? user._id.toString() : userIdOrEmployeeId;
+    // 1. Resolve user ID and employee ID safely
+    const query = [];
+    if (mongoose.Types.ObjectId.isValid(userIdOrEmployeeId) && String(userIdOrEmployeeId).length === 24) {
+        query.push({ _id: userIdOrEmployeeId });
+    }
+    query.push({ employeeId: String(userIdOrEmployeeId) });
+    query.push({ username: String(userIdOrEmployeeId) });
+
+    const user = await User.findOne({ $or: query }).lean();
+    const targetUserId = user ? user._id.toString() : String(userIdOrEmployeeId);
     const targetEmployeeId = user?.employeeId || targetUserId;
 
     // 2. Persist in-app notification record
@@ -96,9 +103,10 @@ export async function notifyUser(userIdOrEmployeeId, notification) {
         userId: targetUserId,
         title: notification.title,
         message: notification.message,
-        type: notification.type,
+        type: notification.type || 'TASK_ASSIGNED',
         link: notification.link || '/dashboard',
         read: false,
+        isRead: false,
     });
 
     // 3. Dispatch Web Push notification to all active devices/browsers of this user

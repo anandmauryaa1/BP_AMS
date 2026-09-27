@@ -275,7 +275,7 @@ router.post('/reset-password', async (req, res) => {
         return res.status(500).json({ success: false, error: 'Failed to reset password' });
     }
 });
-router.put('/change-password', authenticateToken, async (req, res) => {
+const handleChangePassword = async (req, res) => {
     try {
         const { currentPassword, newPassword } = req.body;
         if (!currentPassword || !newPassword || newPassword.length < 6) {
@@ -324,5 +324,8 @@ router.put('/change-password', authenticateToken, async (req, res) => {
         console.error('[API:ChangePassword] Error:', error);
         return res.status(500).json({ success: false, error: 'Failed to change password' });
     }
-});
+};
+
+router.put('/change-password', authenticateToken, handleChangePassword);
+router.post('/change-password', authenticateToken, handleChangePassword);
 export default router;

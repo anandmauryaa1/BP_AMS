@@ -1,6 +1,8 @@
 import { Router } from 'express';
+import mongoose from 'mongoose';
 import { connectToDatabase } from '../db.js';
 import { Task } from '../models/Task.js';
+import { User } from '../models/User.js';
 import { authenticateToken, requireManagerOrAdmin } from '../middleware/auth.js';
 import { recordTaskEvent, recordReviewEvent } from '../services/events.js';
 import { notifyTaskScheduled, notifyTaskStatusUpdate, notifyTaskRescheduled, notifyTaskReassigned, } from '../services/pushNotification.js';
@@ -43,16 +45,68 @@ router.get('/', async (req, res) => {
 router.post('/', requireManagerOrAdmin, async (req, res) => {
     try {
         await connectToDatabase();
-        const taskData = req.body;
+        const taskData = { ...req.body };
+
+        // 1. Auto-generate unique taskId if missing
+        if (!taskData.taskId) {
+            taskData.taskId = `TSK-${Date.now().toString(36).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`;
+        }
+
+        // 2. Set assignedBy from current authenticated user
+        taskData.assignedBy = req.user?.userId;
+        taskData.assignedByName = req.user?.name || req.user?.username || 'Administrator';
+
+        // 3. Resolve assignedTo and assignedToName
+        const rawAssignee = taskData.assignedTo || taskData.assigneeId;
+        if (rawAssignee) {
+            const assigneeQuery = [];
+            if (mongoose.Types.ObjectId.isValid(rawAssignee) && String(rawAssignee).length === 24) {
+                assigneeQuery.push({ _id: rawAssignee });
+            }
+            assigneeQuery.push({ employeeId: String(rawAssignee) });
+            assigneeQuery.push({ username: String(rawAssignee) });
+
+            const assigneeUser = await User.findOne({ $or: assigneeQuery }).lean();
+            if (assigneeUser) {
+                taskData.assignedTo = assigneeUser._id;
+                taskData.assignedToName = assigneeUser.name;
+            } else if (mongoose.Types.ObjectId.isValid(rawAssignee)) {
+                taskData.assignedTo = rawAssignee;
+            } else {
+                taskData.assignedTo = req.user?.userId;
+                taskData.assignedToName = req.user?.name;
+            }
+        } else {
+            taskData.assignedTo = req.user?.userId;
+            taskData.assignedToName = req.user?.name;
+        }
+
+        // 4. Clean up projectId and deliverableId if empty string or null
+        if (!taskData.projectId || taskData.projectId === '' || taskData.projectId === 'undefined') {
+            delete taskData.projectId;
+        }
+        if (!taskData.deliverableId || taskData.deliverableId === '' || taskData.deliverableId === 'undefined') {
+            delete taskData.deliverableId;
+        }
+
+        // 5. Clean up dates
+        if (taskData.dueDate && typeof taskData.dueDate === 'string') {
+            taskData.dueDate = new Date(taskData.dueDate);
+        }
+        if (taskData.startDate && typeof taskData.startDate === 'string') {
+            taskData.startDate = new Date(taskData.startDate);
+        }
+
         const task = await Task.create({
             ...taskData,
             createdBy: req.user?.userId,
         });
+
         if (task.assignedTo) {
             await recordTaskEvent({
                 taskId: task._id.toString(),
                 employeeId: task.assignedTo.toString(),
-                projectId: task.projectId.toString(),
+                projectId: task.projectId ? task.projectId.toString() : undefined,
                 eventType: 'TASK_CREATED',
                 metadata: { title: task.title, priority: task.priority },
             });
@@ -216,6 +270,8 @@ const handleUpdateTask = async (req, res) => {
 
 router.put('/:id', handleUpdateTask);
 router.patch('/:id', handleUpdateTask);
+router.put('/:id/status', handleUpdateTask);
+router.patch('/:id/status', handleUpdateTask);
 router.delete('/:id', requireManagerOrAdmin, async (req, res) => {
     try {
         await connectToDatabase();
