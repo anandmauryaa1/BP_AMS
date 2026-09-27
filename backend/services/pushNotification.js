@@ -8,57 +8,6 @@ export const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY ||
 export const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || 'odUH2N57oBzSRWg2C-bHgXyY66pUv4HhHPl-8XtgZ-Q';
 export const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:notifications@blindareaproduction.com';
 
-export const ONESIGNAL_APP_ID =
-    process.env.ONESIGNAL_APP_ID || process.env.NEXT_PUBLIC_ONESIGNAL_APP_ID || 'ba184f42-0674-498b-aa06-dd096ef5fcc3';
-export const ONESIGNAL_REST_API_KEY = process.env.ONESIGNAL_REST_API_KEY || process.env.ONESIGNAL_API_KEY || '';
-
-/**
- * Dispatch a push notification via OneSignal REST API v1
- */
-export async function sendOneSignalPush(params) {
-    const { externalIds, headings, contents, url, data } = params;
-    if (!ONESIGNAL_APP_ID || !ONESIGNAL_REST_API_KEY) {
-        return { sent: false, reason: 'ONESIGNAL_NOT_CONFIGURED' };
-    }
-
-    try {
-        const bodyPayload = {
-            app_id: ONESIGNAL_APP_ID,
-            target_channel: 'push',
-            headings: typeof headings === 'string' ? { en: headings } : headings,
-            contents: typeof contents === 'string' ? { en: contents } : contents,
-            url: url || `${process.env.CLIENT_URL || 'http://localhost:3000'}/dashboard`,
-            data: data || {},
-        };
-
-        if (externalIds && externalIds.length > 0) {
-            bodyPayload.include_aliases = {
-                external_id: externalIds.map(String),
-            };
-        } else {
-            bodyPayload.included_segments = ['Total Subscriptions'];
-        }
-
-        const res = await fetch('https://api.onesignal.com/notifications', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Key ${ONESIGNAL_REST_API_KEY}`,
-            },
-            body: JSON.stringify(bodyPayload),
-        });
-
-        const resData = await res.json();
-        if (!res.ok) {
-            console.warn('[OneSignal:Push] Dispatch error response:', resData);
-            return { sent: false, error: resData };
-        }
-        return { sent: true, data: resData };
-    } catch (err) {
-        console.warn('[OneSignal:Push] Request error:', err?.message);
-        return { sent: false, error: err?.message };
-    }
-}
 
 // Initialize WebPush VAPID configuration
 try {
@@ -152,18 +101,7 @@ export async function notifyUser(userIdOrEmployeeId, notification) {
         read: false,
     });
 
-    // 3. Dispatch OneSignal Push Notification if configured
-    if (ONESIGNAL_APP_ID && ONESIGNAL_REST_API_KEY) {
-        await sendOneSignalPush({
-            externalIds: [targetEmployeeId, targetUserId],
-            headings: notification.title,
-            contents: notification.message,
-            url: notification.link ? `${process.env.CLIENT_URL || 'http://localhost:3000'}${notification.link}` : undefined,
-            data: { type: notification.type, userId: targetUserId, employeeId: targetEmployeeId },
-        });
-    }
-
-    // 4. Dispatch Web Push notification to all active devices/browsers of this user
+    // 3. Dispatch Web Push notification to all active devices/browsers of this user
     const subscriptions = await PushSubscription.find({
         $or: [{ userId: targetUserId }, { employeeId: user?.employeeId }],
     });
@@ -200,21 +138,6 @@ export async function notifyRoles(roles, notification) {
     }));
     await Notification.insertMany(records);
 
-    // Dispatch OneSignal Push Notification to targeted roles
-    if (ONESIGNAL_APP_ID && ONESIGNAL_REST_API_KEY) {
-        const externalIds = [];
-        users.forEach((u) => {
-            if (u.employeeId) externalIds.push(u.employeeId);
-            externalIds.push(u._id.toString());
-        });
-        await sendOneSignalPush({
-            externalIds,
-            headings: notification.title,
-            contents: notification.message,
-            url: notification.link ? `${process.env.CLIENT_URL || 'http://localhost:3000'}${notification.link}` : undefined,
-            data: { type: notification.type },
-        });
-    }
 
     // Dispatch Web Push notifications to subscribers with these roles
     const subscriptions = await PushSubscription.find({

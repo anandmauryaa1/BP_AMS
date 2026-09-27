@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
-import { OneSignalInitializer } from '@/components/OneSignalInitializer';
 
 export const metadata: Metadata = {
   title: 'blindarea Production - Attendance Management System',
@@ -50,7 +49,6 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased transition-colors duration-150">
         <ThemeProvider>
           <ServiceWorkerRegister />
-          <OneSignalInitializer />
           {children}
         </ThemeProvider>
       </body>
