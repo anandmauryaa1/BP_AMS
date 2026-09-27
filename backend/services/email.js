@@ -4,7 +4,7 @@ let transporter = null;
 
 function getTransporter() {
     const user = process.env.SMTP_USER;
-    const pass = process.env.SMTP_PASSWORD;
+    const pass = process.env.SMTP_PASSWORD ? process.env.SMTP_PASSWORD.replace(/\s+/g, '') : '';
     const host = process.env.SMTP_HOST || 'smtp.gmail.com';
     const port = Number(process.env.SMTP_PORT) || 465;
     const secure = process.env.SMTP_SECURE !== 'false';
