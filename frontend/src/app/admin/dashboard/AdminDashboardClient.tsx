@@ -7,7 +7,7 @@ import { AdminNav } from '@/components/AdminNav';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { formatTime, formatMinutes, getTodayDateString } from '@/lib/utils';
+import { formatTime, formatMinutes, getTodayDateString, getTimeBasedGreeting } from '@/lib/utils';
 import {
   Users,
   UserCheck,
@@ -155,7 +155,10 @@ export default function AdminDashboardClient({
         {/* Top Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+            <div className="text-xs font-semibold text-rose-600 dark:text-rose-400 uppercase tracking-wider">
+              {getTimeBasedGreeting()}, {currentUser?.name || 'Admin'}
+            </div>
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight mt-0.5">
               Production &amp; Attendance Console
             </h1>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">

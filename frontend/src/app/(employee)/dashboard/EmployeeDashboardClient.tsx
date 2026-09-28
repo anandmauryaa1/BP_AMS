@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Modal } from '@/components/ui/Modal';
-import { formatTime, formatMinutes, formatDate } from '@/lib/utils';
+import { formatTime, formatMinutes, formatDate, getTimeBasedGreeting } from '@/lib/utils';
 import {
   Clock,
   Play,
@@ -346,7 +346,7 @@ export default function EmployeeDashboardClient({
                 )}
               </div>
               <h1 className="text-xl sm:text-2xl font-bold mt-1 text-white tracking-tight flex items-center gap-2">
-                Good day, {user?.name ? user.name : <Skeleton className="h-7 w-40 bg-slate-700/70" />}
+                {getTimeBasedGreeting(currentTime || undefined)}, {user?.name ? user.name : <Skeleton className="h-7 w-40 bg-slate-700/70" />}
               </h1>
               <p className="text-xs text-slate-300 mt-0.5 flex items-center gap-1.5" suppressHydrationWarning>
                 <Calendar className="w-3.5 h-3.5 text-slate-400" />

@@ -60,5 +60,12 @@ export function generateSecurePassword(length: number = 10): string {
     }
   }
   return result;
+}export function getTimeBasedGreeting(dateInput?: Date | string): string {
+  const d = dateInput ? new Date(dateInput) : new Date();
+  const hour = d.getHours();
+  if (hour >= 4 && hour < 12) return 'Good morning';
+  if (hour >= 12 && hour < 17) return 'Good afternoon';
+  if (hour >= 17 && hour < 22) return 'Good evening';
+  return 'Good night';
 }
 
