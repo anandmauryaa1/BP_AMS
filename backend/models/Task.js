@@ -34,6 +34,9 @@ const TaskSchema = new Schema({
     dueDate: { type: Date, index: true },
     estimatedMinutes: { type: Number, default: 60 },
     actualMinutes: { type: Number, default: 0 },
+    outputUrl: { type: String, trim: true },
+    docLink: { type: String, trim: true },
+    driveLink: { type: String, trim: true },
     notes: { type: String, trim: true },
 }, { timestamps: true });
 TaskSchema.index({ assignedTo: 1, status: 1 });

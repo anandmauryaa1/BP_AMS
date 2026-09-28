@@ -21,6 +21,10 @@ const DeliverableSchema = new Schema({
     scheduledAt: { type: Date, index: true },
     publishedAt: { type: Date },
     publishedUrl: { type: String },
+    outputUrl: { type: String, trim: true },
+    docLink: { type: String, trim: true },
+    driveLink: { type: String, trim: true },
+    outputNotes: { type: String, trim: true },
     status: {
         type: String,
         enum: ['PLANNED', 'IN_PRODUCTION', 'READY_FOR_REVIEW', 'NEEDS_REVIEW', 'REVISION', 'APPROVED', 'SCHEDULED', 'PUBLISHED', 'CANCELLED'],

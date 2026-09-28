@@ -226,6 +226,10 @@ export interface IDeliverable {
   scheduledAt?: Date;
   publishedAt?: Date;
   publishedUrl?: string;
+  outputUrl?: string;
+  docLink?: string;
+  driveLink?: string;
+  outputNotes?: string;
   status: DeliverableStatus;
   assignedTo?: string | IUser;
   createdAt: Date;
@@ -250,6 +254,9 @@ export interface ITask {
   dueDate?: Date;
   estimatedMinutes?: number;
   actualMinutes?: number;
+  outputUrl?: string;
+  docLink?: string;
+  driveLink?: string;
   notes?: string;
   createdAt: Date;
   updatedAt: Date;

@@ -1,9 +1,12 @@
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
 
+/** Single canonical localStorage key for the auth token. */
+export const AUTH_TOKEN_KEY = 'auth_token';
+
 export function getAuthToken(): string | null {
   if (typeof window === 'undefined') return null;
-  const local = localStorage.getItem('auth_token') || localStorage.getItem('token');
+  const local = localStorage.getItem(AUTH_TOKEN_KEY);
   if (local) return local;
   const match = document.cookie.match(/(?:^|;\s*)auth_token=([^;]+)/);
   return match ? decodeURIComponent(match[1]) : null;

@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { LeaveRequest } from '../models/LeaveRequest.js';
+import { sendLeaveApplicationEmails, sendLeaveDecisionEmail } from '../services/email.js';
 
-describe('LeaveRequest Model & Schema Validation', () => {
+describe('LeaveRequest Model & Email Notifications', () => {
   it('should normalize leaveType when only type is provided', async () => {
     const leave = new LeaveRequest({
       employeeId: 'EMP-001',
@@ -55,5 +56,10 @@ describe('LeaveRequest Model & Schema Validation', () => {
     await leave.validate();
     expect(leave.leaveType).toBe('CASUAL');
     expect(leave.type).toBe('CASUAL');
+  });
+
+  it('should export sendLeaveApplicationEmails & sendLeaveDecisionEmail functions', () => {
+    expect(typeof sendLeaveApplicationEmails).toBe('function');
+    expect(typeof sendLeaveDecisionEmail).toBe('function');
   });
 });

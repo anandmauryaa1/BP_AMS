@@ -6,17 +6,24 @@ import { User } from '../models/User.js';
 import { authenticateToken, requireManagerOrAdmin } from '../middleware/auth.js';
 import { recordTaskEvent, recordReviewEvent } from '../services/events.js';
 import { notifyTaskScheduled, notifyTaskStatusUpdate, notifyTaskRescheduled, notifyTaskReassigned, } from '../services/pushNotification.js';
+import { escapeRegExp, resolveUserObjectId } from '../utils/index.js';
 const router = Router();
 router.use(authenticateToken);
 router.get('/', async (req, res) => {
     try {
         await connectToDatabase();
-        const { projectId, assignedTo, status, priority, taskType, search } = req.query;
+        const { projectId, assignedTo, status, priority, taskType, search, myTasks } = req.query;
         const query = {};
         if (projectId)
             query.projectId = projectId;
-        if (assignedTo)
-            query.assignedTo = assignedTo;
+        if (myTasks === 'true' && req.user?.userId) {
+            query.assignedTo = req.user.userId;
+        } else if (assignedTo) {
+            const resolvedId = await resolveUserObjectId(assignedTo, User);
+            if (resolvedId) {
+                query.assignedTo = resolvedId;
+            }
+        }
         if (status && status !== 'ALL')
             query.status = status;
         if (priority && priority !== 'ALL')
@@ -24,9 +31,10 @@ router.get('/', async (req, res) => {
         if (taskType && taskType !== 'ALL')
             query.taskType = taskType;
         if (search) {
+            const safeSearch = escapeRegExp(String(search));
             query.$or = [
-                { title: { $regex: search, $options: 'i' } },
-                { description: { $regex: search, $options: 'i' } },
+                { title: { $regex: safeSearch, $options: 'i' } },
+                { description: { $regex: safeSearch, $options: 'i' } },
             ];
         }
         const tasks = await Task.find(query)
@@ -35,7 +43,7 @@ router.get('/', async (req, res) => {
             .populate('deliverableId', 'title platform format')
             .sort({ updatedAt: -1 })
             .lean();
-        return res.json({ success: true, data: tasks });
+        return res.json({ success: true, data: tasks, tasks });
     }
     catch (error) {
         console.error('[API:Tasks:GET] Error:', error);
