@@ -16,6 +16,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { DrillDownModal, DrillDownItem } from './DrillDownModal';
+import { formatDate, formatMinutes } from '@/lib/utils';
 
 interface DeepAnalysisViewProps {
   employeeId: string;
@@ -300,7 +301,7 @@ export const DeepAnalysisView: React.FC<DeepAnalysisViewProps> = ({ employeeId }
                         subtitle: `Project: ${(t.projectId as any)?.title || 'N/A'}`,
                         badgeText: 'On Time',
                         badgeVariant: 'success',
-                        meta: { Status: t.status, Due: t.dueDate ? new Date(t.dueDate).toLocaleDateString() : 'N/A' },
+                        meta: { Status: t.status, Due: formatDate(t.dueDate) },
                       }))
                     )
                   }
@@ -322,7 +323,7 @@ export const DeepAnalysisView: React.FC<DeepAnalysisViewProps> = ({ employeeId }
                         subtitle: `Project: ${(t.projectId as any)?.title || 'N/A'}`,
                         badgeText: 'Completed Late',
                         badgeVariant: 'danger',
-                        meta: { Status: t.status, Due: t.dueDate ? new Date(t.dueDate).toLocaleDateString() : 'N/A' },
+                        meta: { Status: t.status, Due: formatDate(t.dueDate) },
                       }))
                     )
                   }
@@ -345,7 +346,7 @@ export const DeepAnalysisView: React.FC<DeepAnalysisViewProps> = ({ employeeId }
                       subtitle: `Project: ${(t.projectId as any)?.title || 'N/A'}`,
                       badgeText: 'Overdue',
                       badgeVariant: 'danger',
-                      meta: { Status: t.status, Due: t.dueDate ? new Date(t.dueDate).toLocaleDateString() : 'N/A' },
+                      meta: { Status: t.status, Due: formatDate(t.dueDate) },
                     }))
                   )
                 }

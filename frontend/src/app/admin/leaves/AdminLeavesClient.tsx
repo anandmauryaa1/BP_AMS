@@ -19,6 +19,8 @@ import {
   FileText,
 } from 'lucide-react';
 
+import { formatDate } from '@/lib/utils';
+
 interface Props {
   initialLeaves?: any[];
   initialEmployees?: any[];
@@ -346,8 +348,8 @@ export default function AdminLeavesClient({ initialLeaves = [], initialEmployees
                   <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 dark:text-zinc-400">
                     <span className="flex items-center gap-1 font-medium text-slate-700 dark:text-zinc-300">
                       <Calendar className="w-3.5 h-3.5 text-slate-400 dark:text-zinc-500" />
-                      {new Date(leave.startDate).toLocaleDateString()} &rarr;{' '}
-                      {new Date(leave.endDate).toLocaleDateString()}
+                      {formatDate(leave.startDate)} -&gt;{' '}
+                      {formatDate(leave.endDate)}
                     </span>
                     <span>
                       Reason: <b className="text-slate-800 dark:text-zinc-300 font-normal">{leave.reason}</b>

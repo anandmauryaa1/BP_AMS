@@ -31,6 +31,7 @@ import {
   TaskStatus,
   Priority,
 } from '@/types';
+import { formatDate } from '@/lib/utils';
 
 export default function AdminProjectDetailPage() {
   const params = useParams();
@@ -364,7 +365,7 @@ export default function AdminProjectDetailPage() {
             {project.targetReleaseDate && (
               <div className="flex items-center gap-1.5">
                 <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
-                <span>Target: <b className="text-foreground">{new Date(project.targetReleaseDate).toLocaleDateString()}</b></span>
+                <span>Target: <b className="text-foreground">{formatDate(project.targetReleaseDate)}</b></span>
               </div>
             )}
             <div className="flex items-center gap-1.5">
@@ -429,7 +430,7 @@ export default function AdminProjectDetailPage() {
                     {deliv.scheduledReleaseDate && (
                       <div className="text-[11px] text-muted-foreground flex items-center gap-1">
                         <Calendar className="w-3 h-3" />
-                        Release: {new Date(deliv.scheduledReleaseDate).toLocaleDateString()}
+                        Release: {formatDate(deliv.scheduledReleaseDate)}
                       </div>
                     )}
                   </div>

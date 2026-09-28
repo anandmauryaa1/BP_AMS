@@ -295,7 +295,7 @@ export const WeeklyReportView: React.FC<WeeklyReportViewProps> = ({
               {report.dailyTrend.map((d) => {
                 const maxMins = 480; // 8h standard
                 const pct = Math.min(Math.round((d.workingMinutes / maxMins) * 100), 100);
-                const dateLabel = new Date(d.date).toLocaleDateString(undefined, {
+                const dateLabel = new Date(d.date).toLocaleDateString('en-US', {
                   weekday: 'short',
                   day: 'numeric',
                 });

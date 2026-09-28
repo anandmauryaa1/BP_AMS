@@ -21,6 +21,7 @@ import {
   Link as LinkIcon,
 } from 'lucide-react';
 import { ITask, SessionPayload, TaskStatus } from '@/types';
+import { formatDate } from '@/lib/utils';
 
 export default function EmployeeTasksClient({ initialTasks = [] }: { initialTasks?: any[] }) {
   const [user, setUser] = useState<SessionPayload | null>(null);
@@ -250,7 +251,7 @@ export default function EmployeeTasksClient({ initialTasks = [] }: { initialTask
                     {task.dueDate && (
                       <div className="flex items-center gap-1 text-[11px] font-mono text-rose-700 dark:text-rose-400">
                         <Calendar className="w-3 h-3" />
-                        Due: {new Date(task.dueDate).toLocaleDateString()}
+                        Due: {formatDate(task.dueDate)}
                       </div>
                     )}
                     {task.actualMinutes ? (

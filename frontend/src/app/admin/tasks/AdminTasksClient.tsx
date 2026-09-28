@@ -18,6 +18,7 @@ import {
   X,
 } from 'lucide-react';
 import { TaskStatus, Priority, TaskType } from '@/types';
+import { formatDate } from '@/lib/utils';
 
 export default function AdminTasksClient({ initialTasks = [], initialProjects = [], initialEmployees = [] }: { initialTasks?: any[]; initialProjects?: any[]; initialEmployees?: any[] }) {
   const [tasks, setTasks] = useState<any[]>(initialTasks);
@@ -382,7 +383,7 @@ export default function AdminTasksClient({ initialTasks = [], initialProjects = 
                       {task.dueDate && (
                         <span className="flex items-center gap-1 text-slate-400 dark:text-zinc-500">
                           <Calendar className="w-3.5 h-3.5" />
-                          Due {new Date(task.dueDate).toLocaleDateString()}
+                          Due {formatDate(task.dueDate)}
                         </span>
                       )}
                     </div>

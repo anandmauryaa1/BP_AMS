@@ -652,7 +652,7 @@ export default function EmployeeDashboardClient({
                     <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
                       Project: <span className="font-semibold text-slate-700 dark:text-slate-300">{(task.projectId as any)?.title || 'Master Production'}</span>
                       {task.dueDate && (
-                        <span className="ml-2 font-mono">Due: {new Date(task.dueDate).toLocaleDateString()}</span>
+                        <span className="ml-2 font-mono">Due: {formatDate(task.dueDate)}</span>
                       )}
                     </div>
                   </div>
