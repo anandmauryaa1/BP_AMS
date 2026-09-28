@@ -21,6 +21,7 @@ import {
   Calendar,
   Layers,
   ChevronDown,
+  X,
 } from 'lucide-react';
 import {
   ProjectStatus,
@@ -118,6 +119,22 @@ export default function AdminProjectDetailPage() {
       }
     } catch (err) {
       console.error('Failed to update status:', err);
+    }
+  };
+
+  const handleUpdateLeadAssignee = async (leadAssigneeId: string) => {
+    try {
+      const res = await fetch(`/api/projects/${projectId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadAssigneeId: leadAssigneeId || null }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setProject(data.data || { ...project, leadAssigneeId: employees.find((e) => e._id === leadAssigneeId) });
+      }
+    } catch (err) {
+      console.error('Failed to update lead assignee:', err);
     }
   };
 
@@ -291,25 +308,43 @@ export default function AdminProjectDetailPage() {
               </h1>
             </div>
 
-            {/* Pipeline Status Selector */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground font-medium">Stage:</span>
-              <select
-                value={project.status}
-                onChange={(e) => handleUpdateStatus(e.target.value)}
-                className="px-3 py-1.5 rounded-lg bg-background border border-border text-sm font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-red-500"
-              >
-                <option value="IDEA">Idea</option>
-                <option value="RESEARCH">Research</option>
-                <option value="SCRIPTING">Scripting</option>
-                <option value="PRE_PRODUCTION">Pre-Production</option>
-                <option value="SHOOTING">Shooting</option>
-                <option value="POST_PRODUCTION">Post-Production</option>
-                <option value="REVIEW">Review</option>
-                <option value="READY_FOR_RELEASE">Ready for Release</option>
-                <option value="PUBLISHED">Published</option>
-                <option value="ARCHIVED">Archived</option>
-              </select>
+            {/* Pipeline Controls */}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground font-medium">Lead:</span>
+                <select
+                  value={project.leadAssigneeId?._id || project.leadAssigneeId || ''}
+                  onChange={(e) => handleUpdateLeadAssignee(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg bg-background border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-red-500"
+                >
+                  <option value="">👤 Unassigned Lead</option>
+                  {employees.map((emp) => (
+                    <option key={emp._id} value={emp._id}>
+                      👤 {emp.name} ({emp.role || 'Crew'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground font-medium">Stage:</span>
+                <select
+                  value={project.status}
+                  onChange={(e) => handleUpdateStatus(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg bg-background border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-red-500"
+                >
+                  <option value="IDEA">Idea</option>
+                  <option value="RESEARCH">Research</option>
+                  <option value="SCRIPTING">Scripting</option>
+                  <option value="PRE_PRODUCTION">Pre-Production</option>
+                  <option value="SHOOTING">Shooting</option>
+                  <option value="POST_PRODUCTION">Post-Production</option>
+                  <option value="REVIEW">Review</option>
+                  <option value="READY_FOR_RELEASE">Ready for Release</option>
+                  <option value="PUBLISHED">Published</option>
+                  <option value="ARCHIVED">Archived</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -490,7 +525,7 @@ export default function AdminProjectDetailPage() {
                   onClick={() => setIsDeliverableModalOpen(false)}
                   className="text-muted-foreground hover:text-foreground text-sm font-semibold"
                 >
-                  ✕
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 
@@ -631,7 +666,7 @@ export default function AdminProjectDetailPage() {
                   onClick={() => setIsTaskModalOpen(false)}
                   className="text-muted-foreground hover:text-foreground text-sm font-semibold"
                 >
-                  ✕
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 

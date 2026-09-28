@@ -135,7 +135,7 @@ export default function EmployeeProfileClient({ initialProfile = null }: Props) 
                     Account Enrolled
                   </span>
                   <div className="text-xs text-slate-700 dark:text-slate-300">
-                    {user?.createdAt ? formatDate(user.createdAt) : 'â€”'}
+                    {user?.createdAt ? formatDate(user.createdAt) : '-'}
                   </div>
                 </div>
               </div>

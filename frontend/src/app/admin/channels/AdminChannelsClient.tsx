@@ -1,9 +1,9 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect } from 'react';
 import { Navbar } from '@/components/Navbar';
 import { AdminNav } from '@/components/AdminNav';
-import { Tv, Plus, Layers, ExternalLink, Trash2, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
+import { Tv, Plus, Layers, ExternalLink, Trash2, CheckCircle, AlertCircle, RefreshCw, X } from 'lucide-react';
 
 interface ISeries {
   _id: string;
@@ -443,7 +443,7 @@ export default function AdminChannelsClient({ initialChannels = [] }: { initialC
                   onClick={() => setIsChannelModalOpen(false)}
                   className="text-slate-400 hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300 text-sm"
                 >
-                  âœ•
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 
@@ -550,7 +550,7 @@ export default function AdminChannelsClient({ initialChannels = [] }: { initialC
                   onClick={() => setIsSeriesModalOpen(false)}
                   className="text-slate-400 hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300 text-sm"
                 >
-                  âœ•
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 

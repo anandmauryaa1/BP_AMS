@@ -397,6 +397,13 @@ router.get('/reports', async (req, res) => {
         const users = await User.find({ status: 'ACTIVE' }).select('name employeeId department').lean();
         const userMap = new Map(users.map((u) => [u.employeeId, u]));
         const deptMap = {};
+
+        for (const u of users) {
+            if (u.department) {
+                deptMap[u.department] = 0;
+            }
+        }
+
         const records = [];
         for (const att of attendanceRecords) {
             const u = userMap.get(att.employeeId);

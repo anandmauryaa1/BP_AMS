@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Navbar } from '@/components/Navbar';
@@ -300,7 +300,7 @@ export default function EmployeeAttendanceClient() {
                         {record.correction ? (
                           <Badge status={record.correction.status} />
                         ) : (
-                          <span className="text-slate-400 dark:text-slate-600">â€”</span>
+                          <span className="text-slate-400 dark:text-slate-600">-</span>
                         )}
                       </td>
                       <td className="py-3.5 px-4 text-right">

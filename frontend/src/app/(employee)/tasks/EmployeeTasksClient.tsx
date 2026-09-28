@@ -25,6 +25,7 @@ import { ITask, SessionPayload, TaskStatus } from '@/types';
 export default function EmployeeTasksClient({ initialTasks = [] }: { initialTasks?: any[] }) {
   const [user, setUser] = useState<SessionPayload | null>(null);
   const [tasks, setTasks] = useState<ITask[]>([]);
+  const [activeTab, setActiveTab] = useState<'MY_TASKS' | 'UNASSIGNED'>('MY_TASKS');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [isLoading, setIsLoading] = useState(true);
   const [editingTask, setEditingTask] = useState<ITask | null>(null);
@@ -47,24 +48,45 @@ export default function EmployeeTasksClient({ initialTasks = [] }: { initialTask
       const meData = await meRes.json();
       if (meData.success) setUser(meData.data);
 
-      let url = '/api/tasks?myTasks=true';
+      let url = activeTab === 'MY_TASKS' ? '/api/tasks?myTasks=true' : '/api/tasks?assignedTo=unassigned';
       if (statusFilter !== 'ALL') url += `&status=${statusFilter}`;
 
       const res = await fetch(url);
       const data = await res.json();
       if (data.success) {
-        setTasks(data.data.tasks || []);
+        const list = data.data?.tasks || data.tasks || (Array.isArray(data.data) ? data.data : []);
+        setTasks(list);
       }
     } catch (err) {
       console.error('Error fetching tasks:', err);
     } finally {
       setIsLoading(false);
     }
-  }, [statusFilter]);
+  }, [statusFilter, activeTab]);
 
   useEffect(() => {
     fetchTasks();
   }, [fetchTasks]);
+
+  const handlePickTask = async (taskId: string) => {
+    try {
+      const userId = (user as any)?._id || user?.userId || (user as any)?.id;
+      const res = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignedTo: userId, assigneeId: userId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        showToast(data.message || 'Failed to pick task', 'error');
+      } else {
+        showToast('Task picked successfully! Added to your queue.', 'success');
+        fetchTasks();
+      }
+    } catch {
+      showToast('Network error picking task', 'error');
+    }
+  };
 
   const openEditModal = (task: ITask) => {
     setEditingTask(task);
@@ -135,15 +157,38 @@ export default function EmployeeTasksClient({ initialTasks = [] }: { initialTask
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
               <CheckSquare className="w-6 h-6 text-rose-600 dark:text-rose-400" />
-              My Production Tasks
+              Production Tasks
             </h1>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               Production assignments across video editing, scripting, thumbnails, and channel deliverables.
             </p>
           </div>
 
-          {/* Filter Bar */}
-          <div className="flex items-center gap-2">
+          {/* Tab Selector & Status Filter */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="bg-slate-200 dark:bg-slate-800 p-1 rounded-lg flex items-center gap-1">
+              <button
+                onClick={() => setActiveTab('MY_TASKS')}
+                className={`px-3 py-1 text-xs rounded-md font-semibold transition ${
+                  activeTab === 'MY_TASKS'
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                My Tasks
+              </button>
+              <button
+                onClick={() => setActiveTab('UNASSIGNED')}
+                className={`px-3 py-1 text-xs rounded-md font-semibold transition ${
+                  activeTab === 'UNASSIGNED'
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                Available / Unassigned
+              </button>
+            </div>
+
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
@@ -172,7 +217,9 @@ export default function EmployeeTasksClient({ initialTasks = [] }: { initialTask
             ))
           ) : tasks.length === 0 ? (
             <Card className="p-12 text-center text-slate-400 dark:text-slate-500 text-xs border-slate-200 dark:border-slate-800">
-              No tasks match your selected filter.
+              {activeTab === 'MY_TASKS'
+                ? 'No tasks assigned to you match your selected filter.'
+                : 'No unassigned tasks currently available.'}
             </Card>
           ) : (
             tasks.map((task) => (
@@ -231,9 +278,19 @@ export default function EmployeeTasksClient({ initialTasks = [] }: { initialTask
                 </div>
 
                 <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
-                  <Button size="sm" variant="outline" onClick={() => openEditModal(task)} className="text-xs font-semibold">
-                    Update Status
-                  </Button>
+                  {activeTab === 'UNASSIGNED' || !(task as any).assignedTo ? (
+                    <Button
+                      size="sm"
+                      onClick={() => handlePickTask(task._id)}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold gap-1"
+                    >
+                      Pick / Claim Task
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="outline" onClick={() => openEditModal(task)} className="text-xs font-semibold">
+                      Update Status
+                    </Button>
+                  )}
                 </div>
               </Card>
             ))

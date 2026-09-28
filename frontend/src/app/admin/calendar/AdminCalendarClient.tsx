@@ -744,7 +744,7 @@ export default function AdminCalendarClient({ initialDeliverables = [], initialC
                 <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800">
                   <div className="text-[10px] text-slate-500 dark:text-zinc-400 uppercase font-semibold">Platform & Format</div>
                   <div className="font-semibold text-slate-800 dark:text-zinc-200 mt-0.5">
-                    {activeDeliverable.platform} â€¢ {activeDeliverable.format}
+                    {activeDeliverable.platform} • {activeDeliverable.format}
                   </div>
                 </div>
 

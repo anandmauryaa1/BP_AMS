@@ -15,6 +15,7 @@ import {
   FolderKanban,
   AlertCircle,
   RefreshCw,
+  X,
 } from 'lucide-react';
 import { TaskStatus, Priority, TaskType } from '@/types';
 
@@ -174,13 +175,55 @@ export default function AdminTasksClient({ initialTasks = [], initialProjects = 
     }
   };
 
+  const handleUpdateAssignee = async (taskId: string, newAssigneeId: string) => {
+    try {
+      const token = typeof window !== 'undefined' ? (localStorage.getItem('auth_token')) : null;
+      const res = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: 'include',
+        body: JSON.stringify({ assignedTo: newAssigneeId || 'unassigned', assigneeId: newAssigneeId || 'unassigned' }),
+      });
+      if (res.ok) {
+        await fetchTasks();
+      }
+    } catch (err) {
+      console.error('Failed to update assignee:', err);
+    }
+  };
+
+  const handleUpdateTaskProject = async (taskId: string, newProjectId: string) => {
+    try {
+      const token = typeof window !== 'undefined' ? (localStorage.getItem('auth_token')) : null;
+      const res = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: 'include',
+        body: JSON.stringify({ projectId: newProjectId || null }),
+      });
+      if (res.ok) {
+        await fetchTasks();
+      }
+    } catch (err) {
+      console.error('Failed to update task project:', err);
+    }
+  };
+
   const filteredTasks = tasks.filter((t) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
+    const assigneeName = (t.assignedTo?.name || t.assigneeId?.name || '').toLowerCase();
+    const projectTitle = (t.projectId?.title || t.projectId?.name || '').toLowerCase();
     return (
       t.title.toLowerCase().includes(q) ||
-      t.projectId?.title?.toLowerCase().includes(q) ||
-      t.assigneeId?.name?.toLowerCase().includes(q)
+      projectTitle.includes(q) ||
+      assigneeName.includes(q)
     );
   });
 
@@ -293,70 +336,111 @@ export default function AdminTasksClient({ initialTasks = [], initialProjects = 
           </div>
         ) : (
           <div className="space-y-2">
-            {filteredTasks.map((task) => (
-              <div
-                key={task._id}
-                className="p-4 rounded-xl bg-white dark:bg-zinc-900/50 border border-slate-200 dark:border-zinc-800/80 hover:border-slate-300 dark:hover:border-zinc-700 hover:shadow-sm dark:hover:bg-zinc-900/80 transition flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm"
-              >
-                <div className="space-y-1.5">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-semibold text-slate-900 dark:text-zinc-100 text-sm">{task.title}</span>
-                    <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-[10px] font-mono text-slate-700 dark:text-zinc-400 font-medium">
-                      {(task.type || task.taskType || 'TASK').replace(/_/g, ' ')}
-                    </span>
-                    {task.priority === 'URGENT' && (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-500/20 text-red-500 dark:text-red-400">
-                        URGENT
+            {filteredTasks.map((task) => {
+              const currentAssigneeId = task.assignedTo?._id || task.assignedTo || task.assigneeId?._id || task.assigneeId || '';
+              const currentProjectId = task.projectId?._id || task.projectId || '';
+              const assigneeName = task.assignedTo?.name || task.assigneeId?.name || 'Unassigned';
+
+              return (
+                <div
+                  key={task._id}
+                  className="p-4 rounded-xl bg-white dark:bg-zinc-900/50 border border-slate-200 dark:border-zinc-800/80 hover:border-slate-300 dark:hover:border-zinc-700 hover:shadow-sm dark:hover:bg-zinc-900/80 transition flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm"
+                >
+                  <div className="space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold text-slate-900 dark:text-zinc-100 text-sm">{task.title}</span>
+                      <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-[10px] font-mono text-slate-700 dark:text-zinc-400 font-medium">
+                        {(task.type || task.taskType || 'TASK').replace(/_/g, ' ')}
                       </span>
-                    )}
+                      {task.priority === 'URGENT' && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-500/20 text-red-500 dark:text-red-400">
+                          URGENT
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-zinc-400">
+                      {task.projectId && (
+                        <Link
+                          href={`/admin/projects/${task.projectId._id || task.projectId}`}
+                          className="text-slate-700 dark:text-zinc-300 hover:text-rose-600 dark:hover:text-red-400 flex items-center gap-1 font-medium transition"
+                        >
+                          <FolderKanban className="w-3.5 h-3.5 text-slate-400 dark:text-zinc-500" />
+                          {task.projectId.title || task.projectId.name || 'Project'}
+                        </Link>
+                      )}
+                      <span className="flex items-center gap-1 text-slate-600 dark:text-zinc-400">
+                        <User className="w-3.5 h-3.5 text-slate-400 dark:text-zinc-500" />
+                        {assigneeName}
+                      </span>
+                      {task.estimatedMinutes && (
+                        <span className="flex items-center gap-1 text-slate-400 dark:text-zinc-500">
+                          <Clock className="w-3.5 h-3.5" />
+                          {task.estimatedMinutes}m
+                        </span>
+                      )}
+                      {task.dueDate && (
+                        <span className="flex items-center gap-1 text-slate-400 dark:text-zinc-500">
+                          <Calendar className="w-3.5 h-3.5" />
+                          Due {new Date(task.dueDate).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-zinc-400">
-                    {task.projectId && (
-                      <Link
-                        href={`/admin/projects/${task.projectId._id}`}
-                        className="text-slate-700 dark:text-zinc-300 hover:text-rose-600 dark:hover:text-red-400 flex items-center gap-1 font-medium transition"
-                      >
-                        <FolderKanban className="w-3.5 h-3.5 text-slate-400 dark:text-zinc-500" />
-                        {task.projectId.title}
-                      </Link>
-                    )}
-                    <span className="flex items-center gap-1 text-slate-600 dark:text-zinc-400">
-                      <User className="w-3.5 h-3.5 text-slate-400 dark:text-zinc-500" />
-                      {task.assigneeId?.name || 'Unassigned'}
-                    </span>
-                    {task.estimatedMinutes && (
-                      <span className="flex items-center gap-1 text-slate-400 dark:text-zinc-500">
-                        <Clock className="w-3.5 h-3.5" />
-                        {task.estimatedMinutes}m
-                      </span>
-                    )}
-                    {task.dueDate && (
-                      <span className="flex items-center gap-1 text-slate-400 dark:text-zinc-500">
-                        <Calendar className="w-3.5 h-3.5" />
-                        Due {new Date(task.dueDate).toLocaleDateString()}
-                      </span>
-                    )}
+                  {/* Inline Assignment & Status Controls */}
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    {/* Project Selector */}
+                    <select
+                      value={String(currentProjectId)}
+                      onChange={(e) => handleUpdateTaskProject(task._id, e.target.value)}
+                      className="px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-700 text-xs font-medium text-slate-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-rose-500 max-w-[140px] truncate"
+                      title="Assign Project"
+                    >
+                      <option value="">📁 General / No Project</option>
+                      {projects.map((p: any) => {
+                        const pid = String(p._id || p.id || '');
+                        return (
+                          <option key={pid} value={pid}>
+                            📁 {p.title || p.name}
+                          </option>
+                        );
+                      })}
+                    </select>
+
+                    {/* Crew Assignee Selector */}
+                    <select
+                      value={String(currentAssigneeId)}
+                      onChange={(e) => handleUpdateAssignee(task._id, e.target.value)}
+                      className="px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-700 text-xs font-semibold text-slate-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-rose-500 max-w-[140px] truncate"
+                      title="Assign Crew Member"
+                    >
+                      <option value="">👤 Unassigned</option>
+                      {employees.map((emp) => (
+                        <option key={emp._id} value={emp._id}>
+                          👤 {emp.name}
+                        </option>
+                      ))}
+                    </select>
+
+                    {/* Task Status Dropdown */}
+                    <select
+                      value={task.status}
+                      onChange={(e) => handleUpdateStatus(task._id, e.target.value)}
+                      className="px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-700 text-xs font-semibold text-slate-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-rose-500"
+                    >
+                      <option value="TODO">To Do</option>
+                      <option value="IN_PROGRESS">In Progress</option>
+                      <option value="IN_REVIEW">In Review</option>
+                      <option value="CHANGES_REQUESTED">Changes Req.</option>
+                      <option value="APPROVED">Approved</option>
+                      <option value="COMPLETED">Completed</option>
+                      <option value="BLOCKED">Blocked</option>
+                    </select>
                   </div>
                 </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  <select
-                    value={task.status}
-                    onChange={(e) => handleUpdateStatus(task._id, e.target.value)}
-                    className="px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-700 text-xs font-semibold text-slate-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-rose-500"
-                  >
-                    <option value="TODO">To Do</option>
-                    <option value="IN_PROGRESS">In Progress</option>
-                    <option value="IN_REVIEW">In Review</option>
-                    <option value="CHANGES_REQUESTED">Changes Req.</option>
-                    <option value="APPROVED">Approved</option>
-                    <option value="COMPLETED">Completed</option>
-                    <option value="BLOCKED">Blocked</option>
-                  </select>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -373,7 +457,7 @@ export default function AdminTasksClient({ initialTasks = [], initialProjects = 
                   onClick={() => setIsModalOpen(false)}
                   className="text-slate-400 hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300 text-sm"
                 >
-                  âœ•
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 

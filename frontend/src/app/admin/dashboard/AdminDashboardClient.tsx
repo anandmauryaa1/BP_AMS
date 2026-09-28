@@ -99,13 +99,13 @@ export default function AdminDashboardClient({
           const total = fetchedRecords.length;
 
           setMetrics((prev: any) => ({
-            totalEmployees: prev.totalEmployees > 0 ? prev.totalEmployees : total,
-            presentToday: prev.presentToday > 0 ? prev.presentToday : present,
-            absentToday: prev.absentToday > 0 ? prev.absentToday : Math.max(0, total - present),
-            currentlyWorking: prev.currentlyWorking > 0 ? prev.currentlyWorking : working,
-            currentlyOnBreak: prev.currentlyOnBreak > 0 ? prev.currentlyOnBreak : onBreak,
-            completedAttendance: prev.completedAttendance > 0 ? prev.completedAttendance : completed,
-            pendingCorrectionsCount: prev.pendingCorrectionsCount,
+            ...prev,
+            totalEmployees: Math.max(prev.totalEmployees || 0, total),
+            presentToday: present,
+            absentToday: Math.max(0, (prev.totalEmployees || total) - present),
+            currentlyWorking: working,
+            currentlyOnBreak: onBreak,
+            completedAttendance: completed,
           }));
         }
       }

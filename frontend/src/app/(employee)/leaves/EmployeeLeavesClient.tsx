@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Navbar } from '@/components/Navbar';
@@ -161,7 +161,7 @@ export default function EmployeeLeavesClient({ initialLeaves = [] }: { initialLe
               <Card key={leave._id} className="p-4 border-slate-200 dark:border-slate-800 space-y-3 shadow-sm">
                 <div className="flex items-center justify-between">
                   <span className="font-mono font-bold text-xs text-slate-900 dark:text-white">
-                    {leave.startDate} {leave.startDate !== leave.endDate && `â†’ ${leave.endDate}`}
+                    {leave.startDate} {leave.startDate !== leave.endDate && `-> ${leave.endDate}`}
                   </span>
                   <Badge status={leave.status as any} />
                 </div>
@@ -237,7 +237,7 @@ export default function EmployeeLeavesClient({ initialLeaves = [] }: { initialLe
                         <Badge status={leave.status as any} />
                       </td>
                       <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400 italic text-[11px]">
-                        {leave.reviewNotes ? `"${leave.reviewNotes}" by ${leave.reviewedBy}` : 'â€”'}
+                        {leave.reviewNotes ? `"${leave.reviewNotes}" by ${leave.reviewedBy}` : '-'}
                       </td>
                       <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400">{formatDate(leave.createdAt)}</td>
                     </tr>

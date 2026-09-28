@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Navbar } from '@/components/Navbar';
@@ -155,13 +155,13 @@ export default function AdminAuditLogsClient({ initialLogs = [] }: { initialLogs
                       </td>
                       <td className="py-3 px-4 text-slate-600 dark:text-slate-400 font-mono text-[11px]">
                         {log.targetType ? `${log.targetType}: ` : ''}
-                        <span className="text-slate-900 dark:text-white font-semibold">{log.targetId || 'â€”'}</span>
+                        <span className="text-slate-900 dark:text-white font-semibold">{log.targetId || '-'}</span>
                       </td>
                       <td className="py-3 px-4 max-w-xs">
                         <div className="truncate text-slate-600 dark:text-slate-400 font-mono text-[10px]">
                           {log.metadata && Object.keys(log.metadata).length > 0
                             ? JSON.stringify(log.metadata)
-                            : 'â€”'}
+                            : '-'}
                         </div>
                       </td>
                       <td className="py-3 px-4 font-mono text-slate-500 dark:text-slate-400 text-[11px]">

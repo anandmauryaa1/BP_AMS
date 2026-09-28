@@ -16,6 +16,7 @@ import {
   Clock,
   Sparkles,
   ChevronRight,
+  X,
 } from 'lucide-react';
 
 interface Props {
@@ -470,7 +471,7 @@ export default function AdminPlanningClient({ initialChannels = [], initialEmplo
                   onClick={() => setIsDailyModalOpen(false)}
                   className="text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300 text-sm"
                 >
-                  âœ•
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 
@@ -629,7 +630,7 @@ export default function AdminPlanningClient({ initialChannels = [], initialEmplo
                   onClick={() => setIsMonthlyModalOpen(false)}
                   className="text-slate-400 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-300 text-sm"
                 >
-                  âœ•
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 

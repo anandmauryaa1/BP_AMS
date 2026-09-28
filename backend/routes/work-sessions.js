@@ -1,13 +1,16 @@
 import { Router } from 'express';
 import { connectToDatabase } from '../db.js';
 import { WorkSession } from '../models/WorkSession.js';
+import { Project } from '../models/Project.js';
 import { Task } from '../models/Task.js';
 import { Attendance } from '../models/Attendance.js';
 import { getTodayDateString } from '../utils/index.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { recordTaskEvent } from '../services/events.js';
+
 const router = Router();
 router.use(authenticateToken);
+
 router.get('/current', async (req, res) => {
     try {
         await connectToDatabase();
@@ -19,18 +22,33 @@ router.get('/current', async (req, res) => {
             .populate('projectId', 'title code')
             .populate('taskId', 'title')
             .lean();
-        return res.json({ success: true, data: currentSession });
+
+        const activeProjects = await Project.find({
+            status: { $nin: ['CANCELLED', 'ARCHIVED'] }
+        })
+            .select('_id projectId code title status category department')
+            .sort({ title: 1 })
+            .lean();
+
+        return res.json({
+            success: true,
+            data: {
+                currentSession: currentSession || null,
+                activeProjects: activeProjects || []
+            }
+        });
     }
     catch (error) {
         console.error('[API:WorkSessions:Current] Error:', error);
         return res.status(500).json({ success: false, error: 'Failed to fetch current work session' });
     }
 });
+
 router.post('/start', async (req, res) => {
     try {
         await connectToDatabase();
         const employeeId = req.user?.employeeId || req.user?.userId;
-        const { projectId, taskId, projectTitle } = req.body;
+        const { projectId, taskId, projectTitle, notes } = req.body;
         if (!projectId) {
             return res.status(400).json({ success: false, error: 'Project ID is required' });
         }
@@ -52,13 +70,21 @@ router.post('/start', async (req, res) => {
             const att = await Attendance.findOne({ employeeId, date: todayStr });
             if (att) attendanceId = att._id.toString();
         }
+
+        let resolvedTitle = projectTitle;
+        if (!resolvedTitle) {
+            const projDoc = await Project.findById(projectId).lean();
+            if (projDoc) resolvedTitle = projDoc.title;
+        }
+
         const newSession = await WorkSession.create({
             employeeId,
             employeeName: req.user?.name,
             attendanceId,
             projectId,
             taskId: taskId || undefined,
-            projectTitle: projectTitle || 'Project Session',
+            projectTitle: resolvedTitle || 'Project Session',
+            notes: notes || undefined,
             startTime: new Date(),
         });
         if (taskId) {
@@ -77,6 +103,58 @@ router.post('/start', async (req, res) => {
         return res.status(500).json({ success: false, error: 'Failed to start work session' });
     }
 });
+
+router.post('/switch', async (req, res) => {
+    try {
+        await connectToDatabase();
+        const employeeId = req.user?.employeeId || req.user?.userId;
+        const { newProjectId, projectId, taskId, notes } = req.body;
+        const targetProjectId = newProjectId || projectId;
+
+        if (!targetProjectId) {
+            return res.status(400).json({ success: false, error: 'Target project ID is required' });
+        }
+
+        // Stop existing open session if any
+        const openSession = await WorkSession.findOne({
+            $or: [{ employeeId }, { employeeId: req.user?.userId }],
+            endTime: { $exists: false },
+        });
+        if (openSession) {
+            const now = new Date();
+            const mins = Math.max(0, Math.round((now.getTime() - new Date(openSession.startTime).getTime()) / 60000));
+            openSession.endTime = now;
+            openSession.durationMinutes = mins;
+            await openSession.save();
+        }
+        let attendanceId = openSession?.attendanceId;
+        if (!attendanceId) {
+            const todayStr = getTodayDateString();
+            const att = await Attendance.findOne({ employeeId, date: todayStr });
+            if (att) attendanceId = att._id.toString();
+        }
+
+        const projDoc = await Project.findById(targetProjectId).lean();
+
+        const newSession = await WorkSession.create({
+            employeeId,
+            employeeName: req.user?.name,
+            attendanceId,
+            projectId: targetProjectId,
+            taskId: taskId || undefined,
+            projectTitle: projDoc?.title || 'Project Session',
+            notes: notes || undefined,
+            startTime: new Date(),
+        });
+
+        return res.status(200).json({ success: true, data: newSession });
+    }
+    catch (error) {
+        console.error('[API:WorkSessions:Switch] Error:', error);
+        return res.status(500).json({ success: false, error: 'Failed to switch work session' });
+    }
+});
+
 router.post('/stop', async (req, res) => {
     try {
         await connectToDatabase();
@@ -109,4 +187,5 @@ router.post('/stop', async (req, res) => {
         return res.status(500).json({ success: false, error: 'Failed to stop work session' });
     }
 });
+
 export default router;

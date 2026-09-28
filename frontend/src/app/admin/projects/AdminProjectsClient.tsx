@@ -18,6 +18,7 @@ import {
   Clock,
   AlertCircle,
   RefreshCw,
+  X,
 } from 'lucide-react';
 import { ProjectStatus, Priority } from '@/types';
 
@@ -177,7 +178,7 @@ export default function AdminProjectsClient({
         tags: '',
       });
       setIsModalOpen(false);
-      await fetchProjects(true); // bust cache â†’ fresh list
+      await fetchProjects(true); // bust cache -> fresh list
 
     } catch (err: any) {
       setError(err.message || 'An error occurred while creating the project');
@@ -389,7 +390,7 @@ export default function AdminProjectsClient({
                   onClick={() => setIsModalOpen(false)}
                   className="text-slate-400 hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300 text-sm"
                 >
-                  âœ•
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 

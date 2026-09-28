@@ -71,6 +71,64 @@ export default function EmployeeDashboardClient({
     return () => clearInterval(timer);
   }, []);
 
+  // Update live working/break minutes in real time
+  useEffect(() => {
+    if (!attendance || !currentTime) return;
+    const currentStatus = attendance.status;
+
+    if (currentStatus === 'PRESENT' && attendance.checkIn) {
+      let currentSessionStart = attendance.checkIn;
+      if (Array.isArray(attendance.sessions) && attendance.sessions.length > 0) {
+        const lastSession = attendance.sessions[attendance.sessions.length - 1];
+        if (lastSession && !lastSession.checkOut && lastSession.checkIn) {
+          currentSessionStart = lastSession.checkIn;
+        }
+      }
+      const startMs = new Date(currentSessionStart).getTime();
+      const nowMs = currentTime.getTime();
+      const elapsedMins = Math.max(0, Math.floor((nowMs - startMs) / 60000));
+
+      let currentBreakMins = 0;
+      if (Array.isArray(attendance.breaks)) {
+        attendance.breaks.forEach((b: any) => {
+          if (b.start) {
+            const bStart = new Date(b.start).getTime();
+            const bEnd = b.end ? new Date(b.end).getTime() : nowMs;
+            currentBreakMins += Math.max(0, Math.floor((bEnd - bStart) / 60000));
+          }
+        });
+      }
+
+      let priorCompletedWorkingMins = 0;
+      if (Array.isArray(attendance.sessions)) {
+        attendance.sessions.forEach((s: any) => {
+          if (s.checkOut && typeof s.durationMinutes === 'number') {
+            priorCompletedWorkingMins += s.durationMinutes;
+          }
+        });
+      }
+
+      setLiveStats({
+        activeBreakDurationMinutes: currentBreakMins,
+        currentWorkingMinutes: priorCompletedWorkingMins + Math.max(0, elapsedMins - currentBreakMins),
+      });
+    } else if (currentStatus === 'ON_BREAK' && Array.isArray(attendance.breaks)) {
+      let totalBreakMins = 0;
+      const nowMs = currentTime.getTime();
+      attendance.breaks.forEach((b: any) => {
+        if (b.start) {
+          const bStart = new Date(b.start).getTime();
+          const bEnd = b.end ? new Date(b.end).getTime() : nowMs;
+          totalBreakMins += Math.max(0, Math.floor((bEnd - bStart) / 60000));
+        }
+      });
+      setLiveStats((prev) => ({
+        ...prev,
+        activeBreakDurationMinutes: totalBreakMins,
+      }));
+    }
+  }, [currentTime, attendance]);
+
   const showToast = (text: string, type: 'success' | 'error' = 'success') => {
     setToastMessage({ text, type });
     setTimeout(() => setToastMessage(null), 4000);
@@ -101,10 +159,31 @@ export default function EmployeeDashboardClient({
       // 3. Fetch current work session & active projects
       const wsRes = await fetch('/api/work-sessions/current', { credentials: 'include', headers });
       const wsData = await wsRes.json();
+      let fetchedProjects: IProject[] = [];
+
       if (wsData.success && wsData.data) {
-        setCurrentWorkSession(wsData.data.currentSession || null);
-        setActiveProjects(wsData.data.activeProjects || []);
+        const session = wsData.data.currentSession !== undefined
+          ? wsData.data.currentSession
+          : (wsData.data._id ? wsData.data : null);
+        setCurrentWorkSession(session);
+
+        if (Array.isArray(wsData.data.activeProjects)) {
+          fetchedProjects = wsData.data.activeProjects;
+        }
       }
+
+      if (fetchedProjects.length === 0) {
+        try {
+          const projRes = await fetch('/api/projects', { credentials: 'include', headers });
+          const projData = await projRes.json();
+          if (projData.success && projData.data) {
+            fetchedProjects = Array.isArray(projData.data) ? projData.data : (projData.data.projects || []);
+          }
+        } catch (pErr) {
+          console.error('Error fetching fallback projects:', pErr);
+        }
+      }
+      setActiveProjects(fetchedProjects);
 
       // 4. Fetch daily plan queue & tasks
       const planRes = await fetch('/api/plans/daily', { credentials: 'include', headers });
@@ -452,7 +531,7 @@ export default function EmployeeDashboardClient({
                           Session #{idx + 1}
                         </span>
                         <div className="text-[11px] font-mono text-slate-600 dark:text-slate-400">
-                          {formatTime(sess.checkIn)} â†’ {sess.checkOut ? formatTime(sess.checkOut) : 'Active'}
+                          {formatTime(sess.checkIn)} -&gt; {sess.checkOut ? formatTime(sess.checkOut) : 'Active'}
                         </div>
                       </div>
                       <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
@@ -632,7 +711,7 @@ export default function EmployeeDashboardClient({
                 <option value="">-- Choose an active project --</option>
                 {activeProjects.map((p) => (
                   <option key={p._id} value={p._id}>
-                    {p.projectId} - {p.title} ({p.status})
+                    {p.projectId || p.code || 'PRJ'} - {p.title} ({p.status})
                   </option>
                 ))}
               </select>

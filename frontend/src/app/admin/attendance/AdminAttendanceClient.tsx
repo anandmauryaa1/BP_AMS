@@ -423,7 +423,7 @@ export default function AdminAttendanceClient({ initialRecords = [] }: Props) {
                         {rec.correction ? (
                           <Badge status={rec.correction.status} />
                         ) : (
-                          <span className="text-slate-400 dark:text-slate-600">â€”</span>
+                          <span className="text-slate-400 dark:text-slate-600">-</span>
                         )}
                       </td>
                       <td className="py-3 px-4 text-right">

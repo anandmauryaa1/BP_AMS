@@ -17,6 +17,7 @@ router.get('/', async (req, res) => {
             query.department = department;
         const projects = await Project.find(query)
             .populate('managerId', 'name employeeId email')
+            .populate('leadAssigneeId', 'name employeeId email department')
             .populate('teamMembers', 'name employeeId email department')
             .sort({ updatedAt: -1 })
             .lean();
@@ -46,6 +47,7 @@ router.get('/:id', async (req, res) => {
         await connectToDatabase();
         const project = await Project.findById(req.params.id)
             .populate('managerId', 'name employeeId email')
+            .populate('leadAssigneeId', 'name employeeId email department')
             .populate('teamMembers', 'name employeeId email department')
             .lean();
         if (!project) {
@@ -61,7 +63,10 @@ router.get('/:id', async (req, res) => {
 const handleUpdateProject = async (req, res) => {
     try {
         await connectToDatabase();
-        const updated = await Project.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        const updated = await Project.findByIdAndUpdate(req.params.id, req.body, { new: true })
+            .populate('managerId', 'name employeeId email')
+            .populate('leadAssigneeId', 'name employeeId email department')
+            .populate('teamMembers', 'name employeeId email department');
         if (!updated) {
             return res.status(404).json({ success: false, error: 'Project not found' });
         }

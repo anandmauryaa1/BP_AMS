@@ -199,9 +199,18 @@ export const getEmployeeAttendanceToday = cache(async () => {
 /** Fetch current work session — revalidates every 15s */
 export const getCurrentWorkSession = cache(async () => {
   const res = await serverFetch('/api/work-sessions/current', { next: { revalidate: 15 } });
+  const currentSession = res.data?.currentSession !== undefined
+    ? res.data.currentSession
+    : (res.data?._id ? res.data : null);
+
+  let activeProjects = res.data?.activeProjects;
+  if (!Array.isArray(activeProjects) || activeProjects.length === 0) {
+    activeProjects = await getProjects('ALL');
+  }
+
   return {
-    currentSession: res.data?.currentSession || null,
-    activeProjects: res.data?.activeProjects || [],
+    currentSession,
+    activeProjects: Array.isArray(activeProjects) ? activeProjects : [],
   };
 });
 
