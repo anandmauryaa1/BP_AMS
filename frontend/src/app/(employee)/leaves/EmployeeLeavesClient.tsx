@@ -9,7 +9,8 @@ import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { getTodayDateString, formatDate } from '@/lib/utils';
-import { Palmtree, Plus, CheckCircle2, AlertCircle, Calendar } from 'lucide-react';
+import { Palmtree, Plus, CheckCircle2, AlertCircle, Calendar, Clock } from 'lucide-react';
+
 import { ILeaveRequest, LeaveType, SessionPayload } from '@/types';
 
 export default function EmployeeLeavesClient({ initialLeaves = [] }: { initialLeaves?: any[] }) {
@@ -17,8 +18,19 @@ export default function EmployeeLeavesClient({ initialLeaves = [] }: { initialLe
   const [leaves, setLeaves] = useState<ILeaveRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
+  const [selectedLeave, setSelectedLeave] = useState<ILeaveRequest | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  const getLeaveDays = (startDate: string, endDate: string) => {
+    if (!startDate || !endDate) return 1;
+    const start = new Date(startDate).getTime();
+    const end = new Date(endDate).getTime();
+    if (isNaN(start) || isNaN(end)) return 1;
+    const diffTime = Math.abs(end - start);
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+  };
+
 
   const [form, setForm] = useState({
     startDate: getTodayDateString(),
@@ -158,7 +170,11 @@ export default function EmployeeLeavesClient({ initialLeaves = [] }: { initialLe
             </Card>
           ) : (
             leaves.map((leave) => (
-              <Card key={leave._id} className="p-4 border-slate-200 dark:border-slate-800 space-y-3 shadow-sm">
+              <Card
+                key={leave._id}
+                onClick={() => setSelectedLeave(leave)}
+                className="p-4 border-slate-200 dark:border-slate-800 space-y-3 shadow-sm cursor-pointer hover:border-rose-400 dark:hover:border-rose-500/50 hover:shadow-md transition-all"
+              >
                 <div className="flex items-center justify-between">
                   <span className="font-mono font-bold text-xs text-slate-900 dark:text-white">
                     {leave.startDate} {leave.startDate !== leave.endDate && `-> ${leave.endDate}`}
@@ -168,9 +184,9 @@ export default function EmployeeLeavesClient({ initialLeaves = [] }: { initialLe
 
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-mono bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-slate-700 dark:text-slate-300 font-semibold border border-slate-200 dark:border-slate-700">
-                    {leave.leaveType}
+                    {leave.leaveType || (leave as any).type}
                   </span>
-                  <span className="text-xs text-slate-700 dark:text-slate-300 font-medium">
+                  <span className="text-xs text-slate-700 dark:text-slate-300 font-medium truncate">
                     {leave.reason}
                   </span>
                 </div>
@@ -183,6 +199,7 @@ export default function EmployeeLeavesClient({ initialLeaves = [] }: { initialLe
 
                 <div className="text-[10px] text-slate-400 flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-800/60">
                   <span>Applied on {formatDate(leave.createdAt)}</span>
+                  <span className="text-rose-600 dark:text-rose-400 font-semibold">View details &rarr;</span>
                 </div>
               </Card>
             ))
@@ -223,13 +240,17 @@ export default function EmployeeLeavesClient({ initialLeaves = [] }: { initialLe
                   </tr>
                 ) : (
                   leaves.map((leave) => (
-                    <tr key={leave._id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/50 transition-colors">
+                    <tr
+                      key={leave._id}
+                      onClick={() => setSelectedLeave(leave)}
+                      className="hover:bg-slate-100/80 dark:hover:bg-slate-800/80 cursor-pointer transition-colors"
+                    >
                       <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-slate-100 font-mono">
                         {leave.startDate} {leave.startDate !== leave.endDate && `to ${leave.endDate}`}
                       </td>
                       <td className="py-3.5 px-4">
                         <span className="text-[11px] font-mono bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-slate-700 dark:text-slate-300 font-semibold border border-slate-200 dark:border-slate-700">
-                          {leave.leaveType}
+                          {leave.leaveType || (leave as any).type}
                         </span>
                       </td>
                       <td className="py-3.5 px-4 text-slate-700 dark:text-slate-300 max-w-xs truncate">{leave.reason}</td>
@@ -248,7 +269,122 @@ export default function EmployeeLeavesClient({ initialLeaves = [] }: { initialLe
           </div>
         </Card>
 
+        {/* Modal: View Leave Application Details */}
+        {selectedLeave && (
+          <Modal
+            isOpen={!!selectedLeave}
+            onClose={() => setSelectedLeave(null)}
+            title="Leave Application Details"
+            description={`Applied on ${formatDate(selectedLeave.createdAt)}`}
+            maxWidth="lg"
+          >
+            <div className="space-y-5">
+              {/* Header Info Banner */}
+              <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Leave Type:</span>
+                  <span className="text-xs font-mono font-bold bg-rose-100 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 px-3 py-1 rounded-lg border border-rose-200 dark:border-rose-800/80">
+                    {selectedLeave.leaveType || (selectedLeave as any).type || 'CASUAL'}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2.5">
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status:</span>
+                  <Badge status={selectedLeave.status as any} />
+                </div>
+              </div>
+
+              {/* Dates & Duration Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 flex items-center gap-1.5 mb-1">
+                    <Calendar className="w-3.5 h-3.5 text-rose-500" />
+                    Start Date
+                  </div>
+                  <div className="text-sm font-bold font-mono text-slate-900 dark:text-slate-100">
+                    {selectedLeave.startDate}
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 flex items-center gap-1.5 mb-1">
+                    <Calendar className="w-3.5 h-3.5 text-rose-500" />
+                    End Date
+                  </div>
+                  <div className="text-sm font-bold font-mono text-slate-900 dark:text-slate-100">
+                    {selectedLeave.endDate}
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200/60 dark:border-rose-900/40">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-1.5 mb-1">
+                    <Clock className="w-3.5 h-3.5 text-rose-500" />
+                    Total Duration
+                  </div>
+                  <div className="text-sm font-bold font-mono text-rose-700 dark:text-rose-300">
+                    {getLeaveDays(selectedLeave.startDate, selectedLeave.endDate)} Day(s)
+                  </div>
+                </div>
+              </div>
+
+              {/* Reason Box */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                  Reason for Leave
+                </label>
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 text-sm text-slate-800 dark:text-slate-200 whitespace-pre-wrap leading-relaxed">
+                  {selectedLeave.reason || 'No reason provided.'}
+                </div>
+              </div>
+
+              {/* Reviewer / Decision Details */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                  Reviewer & Decision Information
+                </label>
+                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 space-y-2.5 text-xs">
+                  {selectedLeave.status === 'PENDING' ? (
+                    <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 font-medium">
+                      <Clock className="w-4 h-4 shrink-0" />
+                      <span>Your leave application is currently pending review by your manager.</span>
+                    </div>
+                  ) : (
+                    <>
+                      {selectedLeave.reviewedBy && (
+                        <div className="flex items-center justify-between text-slate-700 dark:text-slate-300">
+                          <span className="font-medium text-slate-500 dark:text-slate-400">Reviewed By:</span>
+                          <span className="font-semibold text-slate-900 dark:text-slate-100 font-mono">{selectedLeave.reviewedBy}</span>
+                        </div>
+                      )}
+                      {selectedLeave.reviewedAt && (
+                        <div className="flex items-center justify-between text-slate-700 dark:text-slate-300">
+                          <span className="font-medium text-slate-500 dark:text-slate-400">Reviewed On:</span>
+                          <span>{formatDate(selectedLeave.reviewedAt)}</span>
+                        </div>
+                      )}
+                      <div className="pt-2 border-t border-slate-200/80 dark:border-slate-800">
+                        <span className="font-medium text-slate-500 dark:text-slate-400 block mb-1">Review Notes:</span>
+                        <div className="p-3 rounded-lg bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 italic">
+                          {selectedLeave.reviewNotes ? `"${selectedLeave.reviewNotes}"` : 'No reviewer notes added.'}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Action Footer */}
+              <div className="flex justify-end pt-3 border-t border-slate-100 dark:border-slate-800">
+                <Button variant="outline" size="sm" onClick={() => setSelectedLeave(null)}>
+                  Close
+                </Button>
+              </div>
+            </div>
+          </Modal>
+        )}
+
         {/* Modal: Apply for Leave */}
+
         <Modal
           isOpen={isApplyModalOpen}
           onClose={() => setIsApplyModalOpen(false)}

@@ -37,10 +37,11 @@ export default function AdminLeavesClient({ initialLeaves = [], initialEmployees
 
   // Review / Create Modal States
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
-  const [reviewingLeave, setReviewingLeave] = useState<any | null>(null);
+  const [selectedLeave, setSelectedLeave] = useState<any | null>(null);
   const [reviewNotes, setReviewNotes] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
 
   // Apply Leave Form
   const [applyForm, setApplyForm] = useState({
@@ -106,7 +107,8 @@ export default function AdminLeavesClient({ initialLeaves = [], initialEmployees
       setLeaves((prev) =>
         prev.map((l) => (l._id === leaveId ? { ...l, status, reviewNotes } : l))
       );
-      setReviewingLeave(null);
+      setSelectedLeave(null);
+
       setReviewNotes('');
     } catch (err: any) {
       alert(err.message || 'Failed to update leave status');
@@ -318,7 +320,8 @@ export default function AdminLeavesClient({ initialLeaves = [], initialEmployees
             {filteredLeaves.map((leave) => (
               <div
                 key={leave._id}
-                className="p-5 rounded-xl bg-white dark:bg-zinc-900/50 border border-slate-200 dark:border-zinc-800/80 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm"
+                onClick={() => setSelectedLeave(leave)}
+                className="p-5 rounded-xl bg-white dark:bg-zinc-900/50 border border-slate-200 dark:border-zinc-800/80 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm cursor-pointer hover:border-rose-400 dark:hover:border-rose-500/50 hover:shadow-md transition-all"
               >
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
@@ -351,17 +354,20 @@ export default function AdminLeavesClient({ initialLeaves = [], initialEmployees
                       {formatDate(leave.startDate)} -&gt;{' '}
                       {formatDate(leave.endDate)}
                     </span>
-                    <span>
+                    <span className="truncate max-w-md">
                       Reason: <b className="text-slate-800 dark:text-zinc-300 font-normal">{leave.reason}</b>
                     </span>
                   </div>
                 </div>
 
-                {leave.status === 'PENDING' && (
+                {leave.status === 'PENDING' ? (
                   <div className="flex items-center gap-2 shrink-0">
                     <button
                       disabled={actionLoading === leave._id}
-                      onClick={() => handleAction(leave._id, 'APPROVED')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAction(leave._id, 'APPROVED');
+                      }}
                       className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition disabled:opacity-50"
                     >
                       <CheckCircle className="w-3.5 h-3.5" />
@@ -369,16 +375,151 @@ export default function AdminLeavesClient({ initialLeaves = [], initialEmployees
                     </button>
                     <button
                       disabled={actionLoading === leave._id}
-                      onClick={() => handleAction(leave._id, 'REJECTED')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAction(leave._id, 'REJECTED');
+                      }}
                       className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-red-600 dark:text-red-400 text-xs font-semibold border border-slate-200 dark:border-zinc-700 transition disabled:opacity-50"
                     >
                       <XCircle className="w-3.5 h-3.5" />
                       Reject
                     </button>
                   </div>
+                ) : (
+                  <span className="text-xs text-rose-600 dark:text-rose-400 font-semibold shrink-0">
+                    View Details &rarr;
+                  </span>
                 )}
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Selected Leave Detail / Review Modal */}
+        {selectedLeave && (
+          <div className="fixed inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-zinc-800 pb-3">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <User className="w-5 h-5 text-rose-600 dark:text-red-500" />
+                    {selectedLeave.userId?.name || selectedLeave.employeeName || 'Staff Member'}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400 font-mono mt-0.5">
+                    Employee ID: {selectedLeave.userId?.employeeId || selectedLeave.employeeId}
+                  </p>
+                </div>
+                <button
+                  onClick={() => { setSelectedLeave(null); setReviewNotes(''); }}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-zinc-200"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4 text-xs">
+                <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800">
+                  <span className="font-semibold text-slate-600 dark:text-zinc-400">Leave Type:</span>
+                  <span className="font-mono font-bold px-2.5 py-1 rounded bg-rose-100 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300">
+                    {selectedLeave.leaveType || selectedLeave.type || 'CASUAL'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800">
+                    <span className="text-[11px] text-slate-400 font-medium block mb-1 uppercase">Start Date</span>
+                    <span className="font-mono font-bold text-slate-900 dark:text-white text-sm">
+                      {formatDate(selectedLeave.startDate)}
+                    </span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800">
+                    <span className="text-[11px] text-slate-400 font-medium block mb-1 uppercase">End Date</span>
+                    <span className="font-mono font-bold text-slate-900 dark:text-white text-sm">
+                      {formatDate(selectedLeave.endDate)}
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <span className="font-semibold text-slate-600 dark:text-zinc-400 uppercase block mb-1">Reason for Leave</span>
+                  <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-slate-800 dark:text-zinc-200 whitespace-pre-wrap leading-relaxed">
+                    {selectedLeave.reason || 'No reason provided.'}
+                  </div>
+                </div>
+
+                <div>
+                  <span className="font-semibold text-slate-600 dark:text-zinc-400 uppercase block mb-1">Status & Reviewer Info</span>
+                  <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500">Status:</span>
+                      <span className="font-bold text-slate-900 dark:text-white">{selectedLeave.status}</span>
+                    </div>
+                    {selectedLeave.reviewedBy && (
+                      <div className="flex items-center justify-between text-slate-500">
+                        <span>Reviewed By:</span>
+                        <span className="font-semibold text-slate-800 dark:text-zinc-200">{selectedLeave.reviewedBy}</span>
+                      </div>
+                    )}
+                    {selectedLeave.reviewNotes && (
+                      <div className="pt-2 border-t border-slate-200 dark:border-zinc-800">
+                        <span className="text-slate-500 block mb-1">Review Notes:</span>
+                        <p className="italic text-slate-700 dark:text-zinc-300">&ldquo;{selectedLeave.reviewNotes}&rdquo;</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {selectedLeave.status === 'PENDING' && (
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 dark:text-zinc-400 uppercase mb-1">
+                      Add Reviewer Notes (Optional)
+                    </label>
+                    <textarea
+                      rows={2}
+                      placeholder="Provide reason for approval or rejection..."
+                      value={reviewNotes}
+                      onChange={(e) => setReviewNotes(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-white text-xs focus:outline-none focus:border-rose-500 resize-none"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => { setSelectedLeave(null); setReviewNotes(''); }}
+                  className="px-4 py-2 rounded-lg bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 text-xs font-medium transition"
+                >
+                  Close
+                </button>
+
+                {selectedLeave.status === 'PENDING' && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      disabled={actionLoading === selectedLeave._id}
+                      onClick={async () => {
+                        await handleAction(selectedLeave._id, 'REJECTED');
+                        setSelectedLeave(null);
+                      }}
+                      className="px-3.5 py-2 rounded-lg bg-red-600/10 hover:bg-red-600/20 text-red-600 dark:text-red-400 text-xs font-semibold border border-red-500/20 transition disabled:opacity-50"
+                    >
+                      Reject Leave
+                    </button>
+                    <button
+                      disabled={actionLoading === selectedLeave._id}
+                      onClick={async () => {
+                        await handleAction(selectedLeave._id, 'APPROVED');
+                        setSelectedLeave(null);
+                      }}
+                      className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md shadow-emerald-600/20 transition disabled:opacity-50"
+                    >
+                      Approve Leave
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
