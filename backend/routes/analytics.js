@@ -2,8 +2,12 @@ import { Router } from 'express';
 import { authenticateToken } from '../middleware/auth.js';
 import { computeDeepAnalytics } from '../services/deep-analytics.js';
 import { generateDailyReport, generateWeeklyReport, generateMonthlyReport, } from '../services/report-generator.js';
+import { privateCache } from '../middleware/cacheControl.js';
+
 const router = Router();
 router.use(authenticateToken);
+router.use(privateCache(60, 30));
+
 const handleProgress = async (req, res) => {
     try {
         const employeeId = req.query.employeeId || req.user?.employeeId || req.user?.userId;

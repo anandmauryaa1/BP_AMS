@@ -33,19 +33,16 @@ const AttendanceSchema = new Schema({
         required: [true, 'Employee ID is required'],
         trim: true,
         uppercase: true,
-        index: true,
     },
     date: {
         type: String,
         required: [true, 'Date is required'],
-        index: true,
     },
     status: {
         type: String,
         enum: ['NOT_CHECKED_IN', 'PRESENT', 'ON_BREAK', 'COMPLETED', 'ABSENT', 'MISSED_CHECKOUT'],
         default: 'NOT_CHECKED_IN',
         required: true,
-        index: true,
     },
     checkIn: { type: Date },
     checkOut: { type: Date },
@@ -59,5 +56,12 @@ const AttendanceSchema = new Schema({
 }, {
     timestamps: true,
 });
+
+// ESR Indexing Rule:
+// 1. Unique constraint & exact match: (employeeId [E], date [E/S])
 AttendanceSchema.index({ employeeId: 1, date: 1 }, { unique: true });
+// 2. ESR Rule: Equality (status, employeeId), Sort/Range (date DESC)
+AttendanceSchema.index({ status: 1, employeeId: 1, date: -1 });
+
 export const Attendance = mongoose.models.Attendance || mongoose.model('Attendance', AttendanceSchema);
+

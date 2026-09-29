@@ -2,9 +2,13 @@ import { Router } from 'express';
 import { connectToDatabase } from '../db.js';
 import { Project } from '../models/Project.js';
 import { authenticateToken, requireManagerOrAdmin } from '../middleware/auth.js';
+import { publicCache } from '../middleware/cacheControl.js';
+
 const router = Router();
 router.use(authenticateToken);
-router.get('/', async (req, res) => {
+
+router.get('/', publicCache(300, 600), async (req, res) => {
+
     try {
         await connectToDatabase();
         const { status, category, department } = req.query;
@@ -42,7 +46,8 @@ router.post('/', requireManagerOrAdmin, async (req, res) => {
         return res.status(500).json({ success: false, error: error.message || 'Failed to create project' });
     }
 });
-router.get('/:id', async (req, res) => {
+router.get('/:id', publicCache(300, 600), async (req, res) => {
+
     try {
         await connectToDatabase();
         const project = await Project.findById(req.params.id)

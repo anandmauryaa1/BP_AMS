@@ -24,31 +24,57 @@ export async function computeDeepAnalytics(filters) {
     start.setHours(0, 0, 0, 0);
     const startStr = start.toISOString().split('T')[0];
     const endStr = end.toISOString().split('T')[0];
+    const [attendanceAgg] = await Attendance.aggregate([
+        {
+            $match: {
+                $or: [{ employeeId: empCode }, { employeeId: empMongoId }],
+                date: { $gte: startStr, $lte: endStr },
+            },
+        },
+        {
+            $group: {
+                _id: null,
+                presentDays: {
+                    $sum: {
+                        $cond: [{ $in: ['$status', ['PRESENT', 'COMPLETED', 'ON_BREAK']] }, 1, 0],
+                    },
+                },
+                totalWorkingMins: { $sum: '$totalWorkingMinutes' },
+                totalBreakMins: { $sum: '$totalBreakMinutes' },
+                missedCheckouts: {
+                    $sum: {
+                        $cond: [
+                            { $or: [{ $eq: ['$status', 'MISSED_CHECKOUT'] }, { $and: ['$checkIn', { $not: ['$checkOut'] }] }] },
+                            1,
+                            0,
+                        ],
+                    },
+                },
+            },
+        },
+    ]);
+
     const attendanceRecords = await Attendance.find({
         $or: [{ employeeId: empCode }, { employeeId: empMongoId }],
         date: { $gte: startStr, $lte: endStr },
     }).lean();
+
     const totalDaysInRange = Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
-    let presentDays = 0;
+    const presentDays = attendanceAgg?.presentDays || 0;
+    const totalWorkingMins = attendanceAgg?.totalWorkingMins || 0;
+    const totalBreakMins = attendanceAgg?.totalBreakMins || 0;
+    const missedCheckouts = attendanceAgg?.missedCheckouts || 0;
     let lateArrivals = 0;
-    let missedCheckouts = 0;
-    let totalWorkingMins = 0;
-    let totalBreakMins = 0;
+
     for (const a of attendanceRecords) {
-        if (['PRESENT', 'COMPLETED', 'ON_BREAK'].includes(a.status))
-            presentDays++;
-        totalWorkingMins += a.totalWorkingMinutes || 0;
-        totalBreakMins += a.totalBreakMinutes || 0;
         if (a.checkIn) {
             const checkInDate = new Date(a.checkIn);
             if (checkInDate.getHours() > 9 || (checkInDate.getHours() === 9 && checkInDate.getMinutes() > 30)) {
                 lateArrivals++;
             }
         }
-        if (a.status === 'MISSED_CHECKOUT' || (a.checkIn && !a.checkOut)) {
-            missedCheckouts++;
-        }
     }
+
     const leaveRequests = await LeaveRequest.find({
         $or: [{ employeeId: empCode }, { employeeId: empMongoId }],
         status: 'APPROVED',
