@@ -7,7 +7,7 @@ import { NextRequest } from 'next/server';
 describe('Comprehensive System & Feature Audit', () => {
   describe('1. Rate Limiting Security Engine', () => {
     it('should allow requests within threshold and block requests exceeding limit', () => {
-      const mockReq = new NextRequest('http://localhost:3000/api/auth/login', {
+      const mockReq = new NextRequest(new URL('/api/auth/login', 'https://example.com'), {
         headers: { 'x-forwarded-for': '192.168.1.100' },
       });
 

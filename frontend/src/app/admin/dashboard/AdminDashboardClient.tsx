@@ -152,28 +152,37 @@ export default function AdminDashboardClient({
       <AdminNav />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        {/* Top Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-          <div>
-            <div className="text-xs font-semibold text-rose-600 dark:text-rose-400 uppercase tracking-wider">
-              {getTimeBasedGreeting()}, {currentUser?.name || 'Admin'}
+        {/* Category Hero Banner: Overview & Alerts */}
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950/60 to-slate-900 border border-slate-800 rounded-2xl p-6 mb-6 shadow-2xl relative overflow-hidden backdrop-blur-xl">
+          <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2.5 py-0.5 rounded-full flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                  Category: Overview &amp; Alerts
+                </span>
+                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                  🟢 System Operational &amp; Live
+                </span>
+              </div>
+              <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight mt-1">
+                {getTimeBasedGreeting()}, {currentUser?.name || 'Admin'}
+              </h1>
+              <p className="text-xs text-slate-300 mt-1">
+                Real-time studio operations, team duty presence, and media production pipeline ({getTodayDateString()}).
+              </p>
             </div>
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight mt-0.5">
-              Production &amp; Attendance Console
-            </h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Live operations monitoring, shift presence, and channel deliverable metrics ({getTodayDateString()}).
-            </p>
-          </div>
 
-          <button
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-            className="self-start sm:self-auto inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-sm transition-colors"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-rose-600' : ''}`} />
-            Refresh Data
-          </button>
+            <button
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="self-start sm:self-auto inline-flex items-center gap-2 px-4 py-2 bg-slate-800/80 hover:bg-slate-800 text-slate-200 border border-slate-700/80 rounded-xl text-xs font-semibold shadow-md transition-all backdrop-blur-md"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-blue-400' : 'text-slate-400'}`} />
+              <span>Refresh Console</span>
+            </button>
+          </div>
         </div>
 
         {/* 1. Production Pipeline Metrics Grid */}

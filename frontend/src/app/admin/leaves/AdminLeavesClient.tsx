@@ -457,7 +457,9 @@ export default function AdminLeavesClient({ initialLeaves = [], initialEmployees
                     {selectedLeave.reviewedBy && (
                       <div className="flex items-center justify-between text-slate-500">
                         <span>Reviewed By:</span>
-                        <span className="font-semibold text-slate-800 dark:text-zinc-200">{selectedLeave.reviewedBy}</span>
+                        <span className="font-semibold text-slate-800 dark:text-zinc-200">
+                          {initialEmployees?.find(e => String(e._id) === String(selectedLeave.reviewedBy) || String(e.employeeId) === String(selectedLeave.reviewedBy) || String(e.username) === String(selectedLeave.reviewedBy))?.name || selectedLeave.reviewedBy}
+                        </span>
                       </div>
                     )}
                     {selectedLeave.reviewNotes && (

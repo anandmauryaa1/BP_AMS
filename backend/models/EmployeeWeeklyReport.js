@@ -3,13 +3,12 @@ const EmployeeWeeklyReportSchema = new Schema({
     employeeId: {
         type: String,
         required: [true, 'Employee ID is required'],
-        index: true,
     },
     weekStart: {
         type: String,
         required: [true, 'Week start date (YYYY-MM-DD) is required'],
-        index: true,
     },
+
     weekEnd: {
         type: String,
         required: [true, 'Week end date (YYYY-MM-DD) is required'],

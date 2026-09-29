@@ -2,13 +2,14 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, User, Calendar, BarChart2, PieChart, Clock } from 'lucide-react';
+import { ArrowLeft, User, Calendar, BarChart2, PieChart, Clock, Banknote, Award } from 'lucide-react';
 import { Navbar } from '@/components/Navbar';
 import { AdminNav } from '@/components/AdminNav';
 import { DailyReportView } from '@/components/analytics/DailyReportView';
 import { WeeklyReportView } from '@/components/analytics/WeeklyReportView';
 import { MonthlyReportView } from '@/components/analytics/MonthlyReportView';
 import { DeepAnalysisView } from '@/components/analytics/DeepAnalysisView';
+import { EmployeePerformanceSalaryCard } from '@/components/analytics/EmployeePerformanceSalaryCard';
 
 interface Props {
   params: { id: string };
@@ -17,7 +18,7 @@ interface Props {
 
 export default function EmployeeDetailClient({ params, initialEmployee }: Props) {
   const employeeId = params.id;
-  const [activeTab, setActiveTab] = useState<'daily' | 'weekly' | 'monthly' | 'analysis'>('daily');
+  const [activeTab, setActiveTab] = useState<'salary-performance' | 'daily' | 'weekly' | 'monthly' | 'analysis'>('salary-performance');
   const employee = initialEmployee;
 
   return (
@@ -37,7 +38,7 @@ export default function EmployeeDetailClient({ params, initialEmployee }: Props)
               >
                 <ArrowLeft className="w-5 h-5" />
               </Link>
-              <div className="w-12 h-12 rounded-full bg-blue-600/30 border border-blue-500/40 flex items-center justify-center text-blue-400 font-bold text-xl">
+              <div className="w-12 h-12 rounded-full bg-rose-600/30 border border-rose-500/40 flex items-center justify-center text-rose-400 font-bold text-xl">
                 {employee?.name ? employee.name.charAt(0).toUpperCase() : <User className="w-6 h-6" />}
               </div>
               <div>
@@ -71,10 +72,21 @@ export default function EmployeeDetailClient({ params, initialEmployee }: Props)
           </div>
 
           {/* Navigation Tabs */}
-          <div className="flex border-b border-slate-700/80 mt-6 space-x-2">
+          <div className="flex border-b border-slate-700/80 mt-6 space-x-2 overflow-x-auto">
+            <button
+              onClick={() => setActiveTab('salary-performance')}
+              className={`flex items-center space-x-2 px-4 py-2.5 font-medium text-sm border-b-2 whitespace-nowrap transition-all ${
+                activeTab === 'salary-performance'
+                  ? 'border-rose-500 text-rose-400 bg-rose-500/10 rounded-t-lg font-bold'
+                  : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-600'
+              }`}
+            >
+              <Banknote className="w-4 h-4 text-rose-400" />
+              <span>Performance & Month Salary</span>
+            </button>
             <button
               onClick={() => setActiveTab('daily')}
-              className={`flex items-center space-x-2 px-4 py-2.5 font-medium text-sm border-b-2 transition-all ${
+              className={`flex items-center space-x-2 px-4 py-2.5 font-medium text-sm border-b-2 whitespace-nowrap transition-all ${
                 activeTab === 'daily'
                   ? 'border-blue-500 text-blue-400 bg-blue-500/10 rounded-t-lg'
                   : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-600'
@@ -85,7 +97,7 @@ export default function EmployeeDetailClient({ params, initialEmployee }: Props)
             </button>
             <button
               onClick={() => setActiveTab('weekly')}
-              className={`flex items-center space-x-2 px-4 py-2.5 font-medium text-sm border-b-2 transition-all ${
+              className={`flex items-center space-x-2 px-4 py-2.5 font-medium text-sm border-b-2 whitespace-nowrap transition-all ${
                 activeTab === 'weekly'
                   ? 'border-blue-500 text-blue-400 bg-blue-500/10 rounded-t-lg'
                   : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-600'
@@ -96,7 +108,7 @@ export default function EmployeeDetailClient({ params, initialEmployee }: Props)
             </button>
             <button
               onClick={() => setActiveTab('monthly')}
-              className={`flex items-center space-x-2 px-4 py-2.5 font-medium text-sm border-b-2 transition-all ${
+              className={`flex items-center space-x-2 px-4 py-2.5 font-medium text-sm border-b-2 whitespace-nowrap transition-all ${
                 activeTab === 'monthly'
                   ? 'border-blue-500 text-blue-400 bg-blue-500/10 rounded-t-lg'
                   : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-600'
@@ -107,7 +119,7 @@ export default function EmployeeDetailClient({ params, initialEmployee }: Props)
             </button>
             <button
               onClick={() => setActiveTab('analysis')}
-              className={`flex items-center space-x-2 px-4 py-2.5 font-medium text-sm border-b-2 transition-all ${
+              className={`flex items-center space-x-2 px-4 py-2.5 font-medium text-sm border-b-2 whitespace-nowrap transition-all ${
                 activeTab === 'analysis'
                   ? 'border-blue-500 text-blue-400 bg-blue-500/10 rounded-t-lg'
                   : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-600'
@@ -121,6 +133,7 @@ export default function EmployeeDetailClient({ params, initialEmployee }: Props)
 
         {/* Tab Content */}
         <div>
+          {activeTab === 'salary-performance' && <EmployeePerformanceSalaryCard employeeId={employeeId} />}
           {activeTab === 'daily' && <DailyReportView employeeId={employeeId} />}
           {activeTab === 'weekly' && <WeeklyReportView employeeId={employeeId} />}
           {activeTab === 'monthly' && <MonthlyReportView employeeId={employeeId} />}
@@ -130,3 +143,4 @@ export default function EmployeeDetailClient({ params, initialEmployee }: Props)
     </div>
   );
 }
+

@@ -5,8 +5,11 @@ import { User } from '../models/User.js';
 import { authenticateToken, requireManagerOrAdmin } from '../middleware/auth.js';
 import { getTodayAttendance, checkIn, startBreak, endBreak, checkOut, } from '../services/attendance.js';
 import { getTodayDateString } from '../utils/index.js';
+import { validateGeofenceCheckIn } from '../services/geofence-service.js';
+
 const router = Router();
 router.use(authenticateToken);
+
 router.get('/today', async (req, res) => {
     try {
         let employeeId = req.user?.employeeId || req.user?.userId;
@@ -38,13 +41,29 @@ router.get('/today', async (req, res) => {
         return res.status(500).json({ success: false, error: 'Failed to fetch attendance' });
     }
 });
+
+
 router.post('/check-in', async (req, res) => {
+
     try {
         const employeeId = req.user?.employeeId;
         if (!employeeId) {
             return res.status(400).json({ success: false, error: 'User employee ID not found in session' });
         }
         const { location } = req.body || {};
+
+        // Digital Geofence Validation
+        if (location && location.latitude && location.longitude) {
+            const geofenceResult = await validateGeofenceCheckIn(location.latitude, location.longitude, req.ip);
+            if (!geofenceResult.isValid) {
+                return res.status(400).json({
+                    success: false,
+                    error: geofenceResult.error || 'Digital Check-in denied: Outside approved office geofence boundary.',
+                    geofenceDetails: geofenceResult,
+                });
+            }
+        }
+
         const result = await checkIn(employeeId, location);
         if (!result.success) {
             return res.status(400).json(result);
@@ -56,6 +75,7 @@ router.post('/check-in', async (req, res) => {
         return res.status(500).json({ success: false, error: 'Check-in failed' });
     }
 });
+
 router.post(['/break-start', '/break/start'], async (req, res) => {
     try {
         const employeeId = req.user?.employeeId;

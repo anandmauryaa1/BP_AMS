@@ -1,5 +1,4 @@
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 /** Single canonical localStorage key for the auth token. */
 export const AUTH_TOKEN_KEY = 'auth_token';

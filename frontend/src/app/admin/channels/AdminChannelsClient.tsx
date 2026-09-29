@@ -506,7 +506,7 @@ export default function AdminChannelsClient({ initialChannels = [] }: { initialC
                   </label>
                   <input
                     type="url"
-                    placeholder="https://youtube.com/@blindarea"
+                    placeholder="@blindarea handle"
                     value={channelForm.channelUrl}
                     onChange={(e) => setChannelForm({ ...channelForm, channelUrl: e.target.value })}
                     className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-1 focus:ring-rose-500"

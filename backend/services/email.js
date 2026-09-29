@@ -70,7 +70,7 @@ export async function sendEmail(options) {
 }
 
 export async function sendWelcomeEmail(options) {
-    const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+    const clientUrl = process.env.CLIENT_URL || '';
     const company = options.companyName || 'blindarea Production';
     const signature = getEmailSignature(company);
 
@@ -112,7 +112,7 @@ export async function sendWelcomeEmail(options) {
 }
 
 export async function sendPasswordResetEmail(options) {
-    const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+    const clientUrl = process.env.CLIENT_URL || '';
     const company = options.companyName || 'blindarea Production';
     const resetUrl = `${clientUrl}/reset-password?token=${options.token}`;
     const signature = getEmailSignature(company);
@@ -148,7 +148,7 @@ export async function sendPasswordResetEmail(options) {
 }
 
 export async function sendAdminPasswordResetEmail(options) {
-    const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+    const clientUrl = process.env.CLIENT_URL || '';
     const company = options.companyName || 'blindarea Production';
     const signature = getEmailSignature(company);
 
@@ -187,7 +187,7 @@ export async function sendAdminPasswordResetEmail(options) {
 }
 
 export async function sendLeaveApplicationEmails({ leave, employeeEmail, employeeName, adminEmails = [] }) {
-    const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+    const clientUrl = process.env.CLIENT_URL || '';
     const company = 'blindarea Production';
     const signature = getEmailSignature(company);
 
@@ -276,7 +276,7 @@ export async function sendLeaveApplicationEmails({ leave, employeeEmail, employe
 
 export async function sendLeaveDecisionEmail({ leave, employeeEmail, employeeName, reviewerName }) {
     if (!employeeEmail) return;
-    const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+    const clientUrl = process.env.CLIENT_URL || '';
     const company = 'blindarea Production';
     const signature = getEmailSignature(company);
 

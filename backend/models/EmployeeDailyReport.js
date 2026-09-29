@@ -3,13 +3,12 @@ const EmployeeDailyReportSchema = new Schema({
     employeeId: {
         type: String,
         required: [true, 'Employee ID is required'],
-        index: true,
     },
     date: {
         type: String,
         required: [true, 'Date (YYYY-MM-DD) is required'],
-        index: true,
     },
+
     attendance: {
         status: { type: String, default: 'NOT_CHECKED_IN' },
         checkIn: { type: Date },

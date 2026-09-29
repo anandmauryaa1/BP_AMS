@@ -241,32 +241,45 @@ export default function AdminProjectsClient({
       <AdminNav />
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-              <FolderKanban className="w-6 h-6 text-rose-600 dark:text-red-500" />
-              Content Projects
-            </h1>
-            <p className="text-sm text-slate-500 dark:text-zinc-400 mt-1">
-              Master content pipeline: planning, shooting, post-production, and multi-format deliverables.
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => fetchProjects()}
-              className="p-2 rounded-lg bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-zinc-800 transition"
-              title="Refresh"
-            >
-              <RefreshCw className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => { setError(null); setIsModalOpen(true); }}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-medium text-sm transition shadow-lg shadow-rose-600/20"
-            >
-              <Plus className="w-4 h-4" />
-              New Project
-            </button>
+        {/* Studio Production Category Hero Banner */}
+        <div className="bg-gradient-to-r from-slate-900 via-rose-950/60 to-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl relative overflow-hidden backdrop-blur-xl">
+          <div className="absolute top-0 right-0 w-96 h-96 bg-rose-500/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-[10px] font-extrabold uppercase tracking-wider bg-rose-500/20 text-rose-300 border border-rose-500/30 px-2.5 py-0.5 rounded-full flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />
+                  Category: Studio Production
+                </span>
+                <span className="text-[10px] font-mono text-rose-300 bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/20">
+                  🎬 Active Media Pipeline
+                </span>
+              </div>
+              <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight mt-1 flex items-center gap-2">
+                <FolderKanban className="w-6 h-6 text-rose-400" />
+                Content Projects &amp; Video Production
+              </h1>
+              <p className="text-xs text-slate-300 mt-1">
+                Master content pipeline: planning, scripting, shooting, post-production, and multi-format video deliverables.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => fetchProjects()}
+                className="p-2 rounded-xl bg-slate-800/80 border border-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-800 transition shadow-sm"
+                title="Refresh Projects"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => { setError(null); setIsModalOpen(true); }}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs transition shadow-lg shadow-rose-600/30"
+              >
+                <Plus className="w-4 h-4" />
+                <span>New Production Project</span>
+              </button>
+            </div>
           </div>
         </div>
 

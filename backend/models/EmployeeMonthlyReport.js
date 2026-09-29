@@ -3,18 +3,16 @@ const EmployeeMonthlyReportSchema = new Schema({
     employeeId: {
         type: String,
         required: [true, 'Employee ID is required'],
-        index: true,
     },
     year: {
         type: Number,
         required: [true, 'Year is required'],
-        index: true,
     },
     month: {
         type: Number,
         required: [true, 'Month (1-12) is required'],
-        index: true,
     },
+
     attendance: {
         workingDays: { type: Number, default: 0 },
         presentDays: { type: Number, default: 0 },

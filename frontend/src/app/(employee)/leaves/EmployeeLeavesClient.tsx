@@ -353,7 +353,7 @@ export default function EmployeeLeavesClient({ initialLeaves = [] }: { initialLe
                       {selectedLeave.reviewedBy && (
                         <div className="flex items-center justify-between text-slate-700 dark:text-slate-300">
                           <span className="font-medium text-slate-500 dark:text-slate-400">Reviewed By:</span>
-                          <span className="font-semibold text-slate-900 dark:text-slate-100 font-mono">{selectedLeave.reviewedBy}</span>
+                          <span className="font-semibold text-slate-900 dark:text-slate-100">{selectedLeave.reviewedBy}</span>
                         </div>
                       )}
                       {selectedLeave.reviewedAt && (

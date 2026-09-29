@@ -1,8 +1,18 @@
 import { Router } from 'express';
 import { authenticateToken } from '../middleware/auth.js';
 import { computeDeepAnalytics } from '../services/deep-analytics.js';
-import { generateDailyReport, generateWeeklyReport, generateMonthlyReport, } from '../services/report-generator.js';
+import { generateDailyReport, generateWeeklyReport, generateMonthlyReport } from '../services/report-generator.js';
 import { privateCache } from '../middleware/cacheControl.js';
+import { connectToDatabase } from '../db.js';
+import { User } from '../models/User.js';
+import { Task } from '../models/Task.js';
+import { Attendance } from '../models/Attendance.js';
+import { LeaveRequest } from '../models/LeaveRequest.js';
+import { PayrollStructure } from '../models/PayrollStructure.js';
+import { PayrollRun } from '../models/PayrollRun.js';
+import { SalaryLoan } from '../models/SalaryLoan.js';
+import { TaxDeclaration } from '../models/TaxDeclaration.js';
+import { calculateMonthlyTds } from '../services/tds-tax-engine.js';
 
 const router = Router();
 router.use(authenticateToken);
@@ -34,6 +44,7 @@ const handleProgress = async (req, res) => {
 };
 router.get('/employee-progress', handleProgress);
 router.get('/deep-analysis', handleProgress);
+
 const handleDailyReport = async (req, res) => {
     try {
         const employeeId = req.query.employeeId || req.user?.employeeId || req.user?.userId;
@@ -55,6 +66,7 @@ const handleDailyReport = async (req, res) => {
 };
 router.get('/daily-report', handleDailyReport);
 router.get('/reports/daily', handleDailyReport);
+
 const handleWeeklyReport = async (req, res) => {
     try {
         const employeeId = req.query.employeeId || req.user?.employeeId || req.user?.userId;
@@ -76,6 +88,7 @@ const handleWeeklyReport = async (req, res) => {
 };
 router.get('/weekly-report', handleWeeklyReport);
 router.get('/reports/weekly', handleWeeklyReport);
+
 const handleMonthlyReport = async (req, res) => {
     try {
         const employeeId = req.query.employeeId || req.user?.employeeId || req.user?.userId;
@@ -98,6 +111,257 @@ const handleMonthlyReport = async (req, res) => {
 };
 router.get('/monthly-report', handleMonthlyReport);
 router.get('/reports/monthly', handleMonthlyReport);
+
+const handleEmployeePerformanceSalary = async (req, res) => {
+    try {
+        await connectToDatabase();
+        let rawEmpId = req.query.employeeId;
+        if (!rawEmpId || rawEmpId === 'self' || rawEmpId === 'undefined' || rawEmpId === 'null') {
+            rawEmpId = req.user?.employeeId || req.user?.userId || req.user?._id;
+        }
+
+        if (!rawEmpId) {
+            return res.status(400).json({ success: false, error: 'Employee ID is required' });
+        }
+
+        const stringEmpId = String(rawEmpId);
+        const user = await User.findOne({
+            $or: [
+                { _id: stringEmpId.length === 24 ? stringEmpId : null },
+                { employeeId: stringEmpId.toUpperCase() },
+                { username: stringEmpId },
+                { _id: req.user?.userId || req.user?._id },
+                { employeeId: req.user?.employeeId ? String(req.user.employeeId).toUpperCase() : null },
+            ].filter(Boolean),
+        }).lean();
+
+        if (!user) {
+            return res.status(404).json({ success: false, error: 'Employee profile not found' });
+        }
+
+        const empMongoId = user._id.toString();
+        const empCode = user.employeeId;
+
+        const targetYear = parseInt(req.query.year || new Date().getFullYear().toString(), 10);
+        const targetMonth = parseInt(req.query.month || (new Date().getMonth() + 1).toString(), 10);
+
+        const monthStr = String(targetMonth).padStart(2, '0');
+        const monthPrefix = `${targetYear}-${monthStr}`;
+        const totalDaysInMonth = new Date(targetYear, targetMonth, 0).getDate();
+
+        // 1. Task Performance
+        const taskQuery = {
+            $or: [{ assigneeId: empMongoId }, { assigneeId: empCode }, { employeeId: empCode }],
+        };
+        const tasks = await Task.find(taskQuery).lean();
+        const monthTasks = tasks.filter(t => {
+            const taskDate = t.createdAt ? new Date(t.createdAt).toISOString().split('T')[0] : '';
+            return taskDate.startsWith(monthPrefix) || t.status === 'IN_PROGRESS';
+        });
+
+        const assignedTasksCount = monthTasks.length;
+        const completedTasksCount = monthTasks.filter(t => t.status === 'COMPLETED' || t.status === 'DONE').length;
+        const inProgressTasksCount = monthTasks.filter(t => t.status === 'IN_PROGRESS' || t.status === 'ASSIGNED').length;
+        const overdueTasksCount = monthTasks.filter(t => {
+            if (t.status === 'COMPLETED' || t.status === 'DONE') return false;
+            if (!t.dueDate) return false;
+            return new Date(t.dueDate) < new Date();
+        }).length;
+
+        const completionRate = assignedTasksCount > 0 ? Math.round((completedTasksCount / assignedTasksCount) * 100) : 100;
+        const delayRate = assignedTasksCount > 0 ? Math.round((overdueTasksCount / assignedTasksCount) * 100) : 0;
+        const performanceScore = Math.max(0, Math.min(100, Math.round(completionRate * 0.7 + (100 - delayRate) * 0.3)));
+
+        // 2. Attendance & Leaves Analysis for target month
+        const attendanceRecords = await Attendance.find({
+            $or: [{ employeeId: empCode }, { employeeId: empMongoId }],
+            date: { $regex: `^${monthPrefix}` },
+        }).lean();
+
+        let loggedPresentDays = 0;
+        for (const att of attendanceRecords) {
+            if (['PRESENT', 'COMPLETED', 'ON_BREAK'].includes(att.status)) {
+                loggedPresentDays++;
+            }
+        }
+        const actualPresentDays = attendanceRecords.length > 0 ? loggedPresentDays : totalDaysInMonth;
+
+        const leaveRequests = await LeaveRequest.find({
+            $or: [{ employeeId: empCode }, { userId: empMongoId }, { user: empMongoId }],
+            status: 'APPROVED',
+        }).lean();
+
+        let approvedPaidLeaves = 0;
+        let lwpDays = 0;
+
+        leaveRequests.forEach(lvl => {
+            const lvlStart = new Date(lvl.startDate);
+            const lvlEnd = new Date(lvl.endDate);
+            if (lvlStart.getFullYear() === targetYear && (lvlStart.getMonth() + 1) === targetMonth) {
+                const days = lvl.totalDays || Math.max(1, Math.ceil((lvlEnd.getTime() - lvlStart.getTime()) / (1000 * 3600 * 24)) + 1);
+                if (['UNPAID', 'LWP', 'LEAVE_WITHOUT_PAY'].includes(lvl.leaveType?.toUpperCase())) {
+                    lwpDays += days;
+                } else {
+                    approvedPaidLeaves += days;
+                }
+            }
+        });
+
+        if (attendanceRecords.length > 0) {
+            const unlogged = Math.max(0, totalDaysInMonth - actualPresentDays - approvedPaidLeaves);
+            lwpDays = Math.max(lwpDays, unlogged);
+        }
+
+        const effectivePaidDays = Math.max(0, totalDaysInMonth - lwpDays);
+        const paidDaysRatio = effectivePaidDays / totalDaysInMonth;
+
+        // 3. Salary & Leave Deduction Calculation
+        const empCodeUpper = empCode ? empCode.toUpperCase() : '';
+        const structureQuery = {
+            $or: [
+                ...(empCodeUpper ? [{ employeeId: empCodeUpper }] : []),
+                ...(empCode ? [{ employeeId: empCode }] : []),
+                ...(empMongoId ? [{ employeeId: empMongoId }, { userId: empMongoId }] : []),
+                ...(stringEmpId ? [{ employeeId: stringEmpId }, { employeeId: stringEmpId.toUpperCase() }] : [])
+            ].filter(Boolean)
+        };
+
+        const structure = await PayrollStructure.findOne(structureQuery).lean() || {
+            monthlyGross: 50000,
+            basic: 25000,
+            hra: 12500,
+            specialAllowance: 12500,
+            annualCtc: 600000,
+            taxRegime: 'NEW',
+            isPfEligible: true,
+            isEsicEligible: false,
+            isPtEligible: true,
+            isTdsEligible: true,
+            isBasicEligible: true,
+            isHraEligible: true,
+            isSpecialAllowanceEligible: true,
+        };
+
+        const isPfOn = structure.isPfEligible !== false;
+        const isEsicOn = structure.isEsicEligible === true;
+        const isPtOn = structure.isPtEligible !== false;
+        const isTdsOn = structure.isTdsEligible !== false && !['NA', 'NONE', 'N/A'].includes(String(structure.taxRegime || '').toUpperCase());
+        const isBasicOn = structure.isBasicEligible !== false;
+        const isHraOn = structure.isHraEligible !== false;
+        const isSpecialAllowanceOn = structure.isSpecialAllowanceEligible !== false;
+
+        const baseMonthlyGross = structure.monthlyGross || Math.round((structure.annualCtc || structure.ctc || 600000) / 12) || ((structure.basic || 0) + (structure.hra || 0) + (structure.specialAllowance || 0));
+        const lopDeduction = Math.round((baseMonthlyGross / totalDaysInMonth) * lwpDays);
+        const earnedGross = Math.max(0, baseMonthlyGross - lopDeduction);
+
+        const basicPaid = isBasicOn ? Math.round((structure.basic || (baseMonthlyGross * 0.5)) * paidDaysRatio) : 0;
+        const hraPaid = isHraOn ? Math.round((structure.hra || (baseMonthlyGross * 0.25)) * paidDaysRatio) : 0;
+        const specialAllowancePaid = isSpecialAllowanceOn ? Math.max(0, earnedGross - basicPaid - hraPaid) : 0;
+
+        const pfDeduction = isPfOn ? Math.round(Math.min(1800, (basicPaid || (earnedGross * 0.5)) * 0.12)) : 0;
+        const esicDeduction = isEsicOn ? Math.round(earnedGross * 0.0075) : 0;
+        const ptDeduction = (isPtOn && earnedGross > 10000) ? (structure.professionalTax || 200) : 0;
+
+        const taxDecl = await TaxDeclaration.findOne({
+            $or: [
+                ...(empCodeUpper ? [{ employeeId: empCodeUpper }] : []),
+                ...(empCode ? [{ employeeId: empCode }] : []),
+                ...(empMongoId ? [{ employeeId: empMongoId }, { userId: empMongoId }] : [])
+            ]
+        }).lean();
+
+        const annualGross = (structure.annualCtc || structure.ctc || (baseMonthlyGross * 12));
+        const tdsDeduction = isTdsOn ? calculateMonthlyTds(annualGross, structure.taxRegime || 'NEW', taxDecl || {}) : 0;
+
+        let loanEmiDeduction = 0;
+        const activeLoan = await SalaryLoan.findOne({
+            status: 'ACTIVE',
+            $or: [
+                ...(empCodeUpper ? [{ employeeId: empCodeUpper }] : []),
+                ...(empCode ? [{ employeeId: empCode }] : []),
+                ...(empMongoId ? [{ employeeId: empMongoId }, { userId: empMongoId }] : [])
+            ]
+        }).lean();
+        if (activeLoan && activeLoan.remainingBalance > 0) {
+            loanEmiDeduction = Math.min(activeLoan.monthlyEmi, activeLoan.remainingBalance);
+        }
+
+        const totalDeductions = lopDeduction + pfDeduction + esicDeduction + ptDeduction + tdsDeduction + loanEmiDeduction;
+        const netPayable = Math.max(0, baseMonthlyGross - totalDeductions);
+
+        const existingRun = await PayrollRun.findOne({ month: targetMonth, year: targetYear, employeeId: empCode }).lean();
+
+        return res.json({
+            success: true,
+            data: {
+                employee: {
+                    id: user._id,
+                    employeeId: user.employeeId,
+                    name: user.name,
+                    email: user.email,
+                    phone: user.phone || 'N/A',
+                    department: user.department || 'Production',
+                    designation: user.designation || 'Team Member',
+                    role: user.role,
+                    status: user.status,
+                },
+                period: {
+                    month: targetMonth,
+                    year: targetYear,
+                    totalDaysInMonth,
+                },
+                performance: {
+                    assignedTasks: assignedTasksCount,
+                    completedTasks: completedTasksCount,
+                    inProgressTasks: inProgressTasksCount,
+                    overdueTasks: overdueTasksCount,
+                    completionRate,
+                    delayRate,
+                    performanceScore,
+                    ratingLabel: performanceScore >= 90 ? 'Exceptional' : performanceScore >= 75 ? 'Good' : 'Needs Focus',
+                },
+                attendance: {
+                    totalDaysInMonth,
+                    presentDays: actualPresentDays,
+                    approvedPaidLeaves,
+                    lwpDays,
+                    effectivePaidDays,
+                },
+                salary: {
+                    annualCtc: structure.annualCtc || structure.ctc || (baseMonthlyGross * 12),
+                    baseMonthlyGross,
+                    lopDeduction,
+                    earnedGross,
+                    basicPaid,
+                    hraPaid,
+                    specialAllowancePaid,
+                    pfDeduction,
+                    esicDeduction,
+                    ptDeduction,
+                    tdsDeduction,
+                    loanEmiDeduction,
+                    totalDeductions,
+                    netPayable: existingRun?.netPay || netPayable,
+                    status: existingRun ? 'PROCESSED' : 'ESTIMATED_LIVE',
+                    taxRegime: structure.taxRegime || 'NEW',
+                    isPfEligible: isPfOn,
+                    isEsicEligible: isEsicOn,
+                    isPtEligible: isPtOn,
+                    isTdsEligible: isTdsOn,
+                    isBasicEligible: isBasicOn,
+                    isHraEligible: isHraOn,
+                    isSpecialAllowanceEligible: isSpecialAllowanceOn,
+                },
+            },
+        });
+    } catch (error) {
+        console.error('[API:Analytics:PerformanceSalary] Error:', error);
+        return res.status(500).json({ success: false, error: error.message || 'Failed to fetch employee performance & salary report' });
+    }
+};
+
+router.get('/employee-performance-salary', handleEmployeePerformanceSalary);
+
 router.get('/export', async (req, res) => {
     try {
         const employeeId = req.query.employeeId || req.user?.employeeId || req.user?.userId;
@@ -136,4 +400,6 @@ router.get('/export', async (req, res) => {
         return res.status(500).json({ success: false, error: error.message || 'Export failed' });
     }
 });
+
 export default router;
+

@@ -332,7 +332,7 @@ export default function EmployeeTasksClient({ initialTasks = [] }: { initialTask
                   type="url"
                   value={outputUrl}
                   onChange={(e) => setOutputUrl(e.target.value)}
-                  placeholder="https://drive.google.com/... or https://docs.google.com/..."
+                  placeholder="Drive / Docs share link"
                   className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-rose-500 font-mono"
                 />
               </div>

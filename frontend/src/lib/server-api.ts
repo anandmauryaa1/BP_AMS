@@ -6,7 +6,7 @@ import { cache } from 'react';
 import { cookies, headers } from 'next/headers';
 
 const BACKEND_URL = (
-  process.env.API_PROXY_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+  process.env.API_PROXY_URL || process.env.NEXT_PUBLIC_API_URL || ''
 ).replace(/\/+$/, '');
 
 /** Extract auth token from the incoming request (server-side only). */

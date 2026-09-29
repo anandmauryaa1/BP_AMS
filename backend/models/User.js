@@ -6,7 +6,6 @@ const UserSchema = new Schema({
         unique: true,
         trim: true,
         uppercase: true,
-        index: true,
     },
     username: {
         type: String,
@@ -14,7 +13,6 @@ const UserSchema = new Schema({
         unique: true,
         trim: true,
         lowercase: true,
-        index: true,
     },
     passwordHash: {
         type: String,
@@ -31,8 +29,8 @@ const UserSchema = new Schema({
         unique: true,
         trim: true,
         lowercase: true,
-        index: true,
     },
+
     phone: {
         type: String,
         trim: true,

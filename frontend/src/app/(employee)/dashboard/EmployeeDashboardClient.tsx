@@ -25,6 +25,7 @@ import {
   ChevronRight,
   FileText,
 } from 'lucide-react';
+import { soundService } from '@/lib/audioSound';
 import { AttendanceStatus, IBreak, IProject, ITask, IWorkSession, SessionPayload } from '@/types';
 
 interface Props {
@@ -242,6 +243,16 @@ export default function EmployeeDashboardClient({
         showToast(data.message || 'Action failed', 'error');
       } else {
         showToast(data.message || 'Updated successfully', 'success');
+
+        // Play specific audio chimes based on action
+        if (actionName === 'check-in' || actionName === 're-checkin') {
+          soundService.playCheckInSound();
+        } else if (actionName === 'check-out') {
+          soundService.playCheckOutSound();
+        } else if (actionName === 'start-break' || actionName === 'end-break') {
+          soundService.playBreakSound();
+        }
+
         await fetchDashboardData();
       }
     } catch {

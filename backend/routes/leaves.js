@@ -26,11 +26,21 @@ router.get('/', async (req, res) => {
         if (status && status !== 'ALL')
             query.status = status;
         const rawLeaves = await LeaveRequest.find(query).sort({ createdAt: -1 }).lean();
+        
+        const users = await User.find({}).select('_id employeeId username name').lean();
+        const userMap = new Map();
+        users.forEach(u => {
+            if (u._id) userMap.set(String(u._id), u.name);
+            if (u.employeeId) userMap.set(String(u.employeeId), u.name);
+            if (u.username) userMap.set(String(u.username), u.name);
+        });
+
         const leaves = rawLeaves.map((l) => ({
             ...l,
             leaveType: l.leaveType || l.type || 'CASUAL',
             type: l.type || l.leaveType || 'CASUAL',
-            employeeName: l.employeeName || l.employeeId || 'Staff Member',
+            employeeName: l.employeeName || userMap.get(String(l.employeeId)) || l.employeeId || 'Staff Member',
+            reviewedBy: l.reviewedBy ? (userMap.get(String(l.reviewedBy)) || l.reviewedBy) : undefined,
         }));
         return res.json({ 
             success: true, 
@@ -139,7 +149,7 @@ const handleUpdateLeave = async (req, res) => {
         }
         const updated = await LeaveRequest.findByIdAndUpdate(req.params.id, {
             status,
-            reviewedBy: req.user?.userId,
+            reviewedBy: req.user?.name || req.user?.username || 'Admin',
             reviewedAt: new Date(),
             rejectionsReason,
         }, { new: true });

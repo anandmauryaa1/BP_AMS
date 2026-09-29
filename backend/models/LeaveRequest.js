@@ -1,6 +1,6 @@
 import mongoose, { Schema } from 'mongoose';
 const LeaveRequestSchema = new Schema({
-    employeeId: { type: String, required: true, index: true },
+    employeeId: { type: String, required: true },
     employeeName: { type: String },
     startDate: { type: String, required: true },
     endDate: { type: String, required: true },
@@ -26,6 +26,9 @@ const LeaveRequestSchema = new Schema({
     reviewNotes: { type: String },
 }, { timestamps: true });
 
+// ESR Compound Index Rule: Equality (employeeId, status), Sort/Range (startDate DESC)
+LeaveRequestSchema.index({ employeeId: 1, status: 1, startDate: -1 });
+
 LeaveRequestSchema.pre('validate', function (next) {
     if (!this.leaveType && this.type) {
         this.leaveType = this.type;
@@ -43,3 +46,4 @@ LeaveRequestSchema.pre('validate', function (next) {
 });
 
 export const LeaveRequest = mongoose.models.LeaveRequest || mongoose.model('LeaveRequest', LeaveRequestSchema);
+

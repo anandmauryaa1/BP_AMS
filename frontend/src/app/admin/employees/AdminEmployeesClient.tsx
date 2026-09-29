@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { cachedFetch, invalidateCachePrefix } from '@/lib/client-cache';
 import { Navbar } from '@/components/Navbar';
 import { AdminNav } from '@/components/AdminNav';
@@ -22,6 +23,7 @@ import {
   Check,
   Sparkles,
   Copy,
+  BarChart3,
 } from 'lucide-react';
 import { generateSecurePassword } from '@/lib/utils';
 
@@ -413,6 +415,14 @@ export default function AdminEmployeesClient({ initialEmployees = [] }: Props) {
                       </td>
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          <Link
+                            href={`/admin/employees/${emp.employeeId || emp._id}`}
+                            className="p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/50 text-rose-600 dark:text-rose-400 font-semibold transition flex items-center gap-1 text-xs"
+                            title="View Performance, Report & Current Month Salary"
+                          >
+                            <BarChart3 className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Report</span>
+                          </Link>
                           <button onClick={() => openEditModal(emp)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-700 text-slate-500 hover:text-slate-900 dark:hover:text-white transition" title="Edit">
                             <Edit3 className="w-3.5 h-3.5" />
                           </button>

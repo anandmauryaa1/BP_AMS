@@ -19,9 +19,21 @@ import plansRouter from './routes/plans.js';
 import channelsRouter from './routes/channels.js';
 import seriesRouter from './routes/series.js';
 import workSessionsRouter from './routes/work-sessions.js';
+import shiftsRouter from './routes/shifts.js';
+import geofenceRouter from './routes/geofence.js';
+import dutyEventsRouter from './routes/duty-events.js';
+import payrollRouter from './routes/payroll.js';
+import complianceRouter from './routes/compliance.js';
+import hcmRouter from './routes/hcm.js';
+import settingsRouter from './routes/settings.js';
+import { User } from './models/User.js';
+import { authenticateToken } from './middleware/auth.js';
+
+
+
 const app = express();
 const PORT = process.env.PORT || 5000;
-const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:3000';
+const CLIENT_URL = process.env.CLIENT_URL || '';
 // Enable trust proxy for proxied requests (e.g. Next.js rewrites)
 app.set('trust proxy', 1);
 // Security Headers
@@ -47,11 +59,11 @@ const globalRateLimiter = rateLimit({
     validate: { xForwardedForHeader: false },
 });
 app.use('/api', globalRateLimiter);
-const allowedOrigins = [CLIENT_URL, 'http://localhost:3000', 'http://127.0.0.1:3000'].filter(Boolean);
+const allowedOrigins = [CLIENT_URL, process.env.FRONTEND_URL].filter(Boolean);
 app.use(cors({
     origin: (origin, callback) => {
         if (!origin) return callback(null, true);
-        if (allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+        if (allowedOrigins.length === 0 || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
             return callback(null, true);
         }
         return callback(null, true);
@@ -93,6 +105,36 @@ app.use('/api/plans', plansRouter);
 app.use('/api/channels', channelsRouter);
 app.use('/api/series', seriesRouter);
 app.use('/api/work-sessions', workSessionsRouter);
+app.use('/api/shifts', shiftsRouter);
+app.use('/api/geofence', geofenceRouter);
+app.use('/api/duty-events', dutyEventsRouter);
+app.use('/api/payroll', payrollRouter);
+app.use('/api/compliance', complianceRouter);
+app.use('/api/hcm', hcmRouter);
+app.use('/api/settings', settingsRouter);
+
+// --- USERS LIST ENDPOINT ---
+app.get(['/api/users', '/api/users/list'], authenticateToken, async (req, res) => {
+    try {
+        await connectToDatabase();
+        const users = await User.find({})
+            .select('_id name email employeeId department designation role status avatar')
+            .sort({ name: 1 })
+            .lean();
+        return res.json({
+            success: true,
+            data: users,
+            users: users,
+            employees: users
+        });
+    } catch (error) {
+        console.error('[API:Users:GET] Error:', error);
+        return res.status(500).json({ success: false, error: 'Failed to fetch users' });
+    }
+});
+
+
+
 // Health check & diagnostic endpoint
 app.get(['/', '/health', '/api/health'], (req, res) => {
     const isDbConnected = mongoose.connection.readyState === 1;

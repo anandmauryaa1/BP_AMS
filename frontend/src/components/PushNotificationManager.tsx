@@ -19,6 +19,7 @@ import {
   sendTestPushNotification,
   getNotificationPermission,
 } from '@/lib/pushClient';
+import { soundService } from '@/lib/audioSound';
 
 interface PushNotificationManagerProps {
   variant?: 'compact' | 'full' | 'banner';
@@ -73,6 +74,7 @@ export const PushNotificationManager: React.FC<PushNotificationManagerProps> = (
       setIsSubscribed(true);
       setPermission('granted');
       setStatusMessage('Push notifications activated successfully.');
+      soundService.playNotificationSound();
       if (onStatusChange) onStatusChange(true);
     } else {
       setPermission(getNotificationPermission());
@@ -107,8 +109,10 @@ export const PushNotificationManager: React.FC<PushNotificationManagerProps> = (
 
     if (result.success) {
       setStatusMessage('Test notification sent! Check your system notification tray.');
+      soundService.playNotificationSound();
     } else {
       setErrorMessage(result.error || 'Failed to dispatch test notification.');
+      soundService.playNotificationSound();
     }
   };
 
@@ -301,6 +305,43 @@ export const PushNotificationManager: React.FC<PushNotificationManagerProps> = (
           ⚠️ Push permissions were previously blocked for this site. Click the site settings icon in your browser URL bar to allow notifications.
         </p>
       )}
+
+      {/* Audio Sound Preview Controls */}
+      <div className="mt-4 pt-3.5 border-t border-slate-100 dark:border-slate-800/80">
+        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-1.5">
+          <span>🔊 Audio Chimes & Event Sounds Preview</span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <button
+            type="button"
+            onClick={() => soundService.playNotificationSound()}
+            className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-1 transition-colors"
+          >
+            <span>🔔 Alert Sound</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => soundService.playCheckInSound()}
+            className="px-2.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-semibold flex items-center justify-center gap-1 transition-colors"
+          >
+            <span>🟢 Check-In</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => soundService.playCheckOutSound()}
+            className="px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-semibold flex items-center justify-center gap-1 transition-colors"
+          >
+            <span>🔴 Check-Out</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => soundService.playBreakSound()}
+            className="px-2.5 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-semibold flex items-center justify-center gap-1 transition-colors"
+          >
+            <span>☕ Break</span>
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
