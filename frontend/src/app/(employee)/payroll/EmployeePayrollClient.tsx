@@ -212,12 +212,24 @@ export default function EmployeePayrollClient() {
               <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
                 <h3 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
                   <Banknote className="w-5 h-5 text-emerald-600" />
-                  Monthly Earnings (Gross)
+                  Monthly Earnings Breakdown & Hourly Rate
                 </h3>
                 <div className="space-y-3 divide-y divide-slate-100 dark:divide-slate-800">
                   <div className="flex justify-between text-sm pt-2">
-                    <span className="text-slate-500">Basic Salary (50%)</span>
-                    <span className="font-semibold text-slate-900 dark:text-white">₹{structure.basicSalary?.toLocaleString('en-IN')}</span>
+                    <span className="text-slate-500">Pay Calculation Basis</span>
+                    <span className="font-bold text-rose-600">
+                      {structure.calculationType === 'HOURLY' ? 'HOURLY WAGE BASIS' : 'MONTHLY FLAT BASE'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm pt-2">
+                    <span className="text-slate-500">Hourly Pay Rate</span>
+                    <span className="font-bold text-slate-900 dark:text-white">
+                      ₹{structure.hourlyRate || Math.round(((structure.annualCtc || 600000) / 12) / 160)} / hr
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm pt-2">
+                    <span className="text-slate-500">Basic Salary</span>
+                    <span className="font-semibold text-slate-900 dark:text-white">₹{structure.basic?.toLocaleString('en-IN')}</span>
                   </div>
                   <div className="flex justify-between text-sm pt-2">
                     <span className="text-slate-500">House Rent Allowance (HRA)</span>
@@ -228,7 +240,7 @@ export default function EmployeePayrollClient() {
                     <span className="font-semibold text-slate-900 dark:text-white">₹{structure.specialAllowance?.toLocaleString('en-IN')}</span>
                   </div>
                   <div className="flex justify-between text-sm pt-2 font-bold text-emerald-600">
-                    <span>Total Monthly Gross</span>
+                    <span>Target Monthly Gross (160 hrs)</span>
                     <span>₹{((structure.annualCtc || 0) / 12)?.toLocaleString('en-IN')}</span>
                   </div>
                 </div>
@@ -379,6 +391,7 @@ export default function EmployeePayrollClient() {
                 <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 text-xs uppercase font-semibold border-b border-slate-200 dark:border-slate-800">
                   <tr>
                     <th className="px-4 py-3">Pay Period</th>
+                    <th className="px-4 py-3">Worked Hours</th>
                     <th className="px-4 py-3">Gross Salary</th>
                     <th className="px-4 py-3">Statutory Deductions</th>
                     <th className="px-4 py-3">TDS Tax</th>
@@ -391,6 +404,12 @@ export default function EmployeePayrollClient() {
                     <tr key={p._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
                       <td className="px-4 py-3 font-bold text-slate-900 dark:text-white">
                         {new Date(2026, p.month - 1, 1).toLocaleString('default', { month: 'long' })} {p.year}
+                      </td>
+                      <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
+                        <span className="font-bold text-slate-900 dark:text-white">
+                          {p.totalWorkingHours || Math.round(((p.totalWorkingMinutes || 0) / 60) * 10) / 10 || 160} hrs
+                        </span>
+                        {p.hourlyRate ? <span className="text-xs text-slate-400 block font-mono">@ ₹{p.hourlyRate}/hr</span> : null}
                       </td>
                       <td className="px-4 py-3 text-slate-700 dark:text-slate-300">₹{p.grossSalary?.toLocaleString('en-IN')}</td>
                       <td className="px-4 py-3 text-rose-600">₹{(p.epfEmployee + p.esicEmployee + p.professionalTax)}</td>

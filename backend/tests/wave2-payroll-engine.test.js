@@ -86,4 +86,52 @@ describe('Wave 2: Automated Payroll & Tax Compliance Engine', () => {
         expect(updatedLoan.remainingBalance).toBe(15000);
         expect(updatedLoan.recoveredAmount).toBe(5000);
     });
+
+    it('4. Hourly Salary Calculator: Should calculate salary based on worked hours and hourly rate', async () => {
+        const { Attendance } = await import('../models/Attendance.js');
+
+        await User.create({
+            name: 'Rahul Kumar',
+            employeeId: 'EMP909',
+            username: 'emp909',
+            passwordHash: 'hashedpassword123',
+            email: 'rahul@example.com',
+            role: 'EMPLOYEE',
+            department: 'ENG',
+            status: 'ACTIVE',
+        });
+
+        await PayrollStructure.create({
+            employeeId: 'EMP909',
+            ctc: 600000,
+            monthlyGross: 50000,
+            basic: 25000,
+            hra: 12500,
+            specialAllowance: 12500,
+            calculationType: 'HOURLY',
+            hourlyRate: 500, // ₹500 per hour
+            standardHoursPerMonth: 160,
+        });
+
+        // Add 100 hours of worked attendance in October 2026 (10 days x 600 mins = 6000 mins = 100 hrs)
+        for (let i = 1; i <= 10; i++) {
+            const dateStr = `2026-10-${String(i).padStart(2, '0')}`;
+            await Attendance.create({
+                employeeId: 'EMP909',
+                date: dateStr,
+                status: 'COMPLETED',
+                totalWorkingMinutes: 600, // 10 hours
+            });
+        }
+
+        const payrolls = await generateMonthlyPayroll(10, 2026, 'EMP909');
+        expect(payrolls.length).toBe(1);
+
+        const run = payrolls[0];
+        expect(run.employeeId).toBe('EMP909');
+        expect(run.totalWorkingHours).toBe(100);
+        expect(run.hourlyRate).toBe(500);
+        // Gross earnings = 100 hrs * 500 ₹/hr = 50,000
+        expect(run.grossEarnings).toBe(50000);
+    });
 });

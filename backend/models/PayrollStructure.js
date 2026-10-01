@@ -10,6 +10,9 @@ const PayrollStructureSchema = new Schema({
     hra: { type: Number, required: true },
     conveyance: { type: Number, default: 0 },
     specialAllowance: { type: Number, default: 0 },
+    calculationType: { type: String, enum: ['HOURLY', 'MONTHLY'], default: 'HOURLY' },
+    hourlyRate: { type: Number, default: 0 }, // Per hour salary rate in currency
+    standardHoursPerMonth: { type: Number, default: 160 },
     pfEmployee: { type: Number, default: 0 },  // 12% of Basic (capped at 1800 if applicable)
     pfEmployer: { type: Number, default: 0 },
     esicEmployee: { type: Number, default: 0 }, // 0.75% of Gross

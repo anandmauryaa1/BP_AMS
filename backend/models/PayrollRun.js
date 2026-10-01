@@ -13,6 +13,10 @@ const PayrollRunSchema = new Schema({
     workingDays: { type: Number, default: 30 },
     presentDays: { type: Number, default: 30 },
     lopDays: { type: Number, default: 0 }, // Loss of pay days
+    totalWorkingMinutes: { type: Number, default: 0 },
+    totalWorkingHours: { type: Number, default: 0 },
+    hourlyRate: { type: Number, default: 0 },
+    calculationType: { type: String, enum: ['HOURLY', 'MONTHLY'], default: 'HOURLY' },
     grossEarnings: { type: Number, required: true },
     basicPaid: { type: Number, required: true },
     hraPaid: { type: Number, required: true },

@@ -10,14 +10,52 @@ import { validateGeofenceCheckIn } from '../services/geofence-service.js';
 const router = Router();
 router.use(authenticateToken);
 
+async function resolveEmployeeId(req) {
+    if (req.user?.employeeId) {
+        return String(req.user.employeeId).toUpperCase();
+    }
+    if (req.user?.userId) {
+        await connectToDatabase();
+        const user = await User.findById(req.user.userId).select('employeeId').lean();
+        if (user?.employeeId) {
+            return String(user.employeeId).toUpperCase();
+        }
+    }
+    return null;
+}
+
+function parseYearAndMonth(yearQuery, monthQuery) {
+    let year = new Date().getFullYear();
+    let month = new Date().getMonth() + 1;
+
+    if (monthQuery && typeof monthQuery === 'string' && monthQuery.includes('-')) {
+        const parts = monthQuery.split('-');
+        const parsedY = parseInt(parts[0], 10);
+        const parsedM = parseInt(parts[1], 10);
+        if (!isNaN(parsedY)) year = parsedY;
+        if (!isNaN(parsedM)) month = parsedM;
+    } else {
+        if (yearQuery) {
+            const parsedY = parseInt(yearQuery, 10);
+            if (!isNaN(parsedY)) year = parsedY;
+        }
+        if (monthQuery) {
+            const parsedM = parseInt(monthQuery, 10);
+            if (!isNaN(parsedM)) month = parsedM;
+        }
+    }
+    return { year, month, monthPrefix: `${year}-${String(month).padStart(2, '0')}` };
+}
+
 router.get('/today', async (req, res) => {
     try {
-        let employeeId = req.user?.employeeId || req.user?.userId;
+        let employeeId = await resolveEmployeeId(req);
         if (req.query.employeeId) {
-            if (req.user?.role === 'EMPLOYEE' && req.query.employeeId !== req.user.employeeId && req.query.employeeId !== req.user.userId) {
+            const targetEmpId = String(req.query.employeeId).toUpperCase();
+            if (req.user?.role === 'EMPLOYEE' && targetEmpId !== employeeId && req.query.employeeId !== req.user?.userId) {
                 return res.status(403).json({ success: false, error: 'Forbidden: Cannot view other employee attendance' });
             }
-            employeeId = req.query.employeeId;
+            employeeId = targetEmpId;
         }
         if (!employeeId) {
             return res.status(400).json({ success: false, error: 'Employee ID is required' });
@@ -42,11 +80,9 @@ router.get('/today', async (req, res) => {
     }
 });
 
-
 router.post('/check-in', async (req, res) => {
-
     try {
-        const employeeId = req.user?.employeeId;
+        const employeeId = await resolveEmployeeId(req);
         if (!employeeId) {
             return res.status(400).json({ success: false, error: 'User employee ID not found in session' });
         }
@@ -78,7 +114,7 @@ router.post('/check-in', async (req, res) => {
 
 router.post(['/break-start', '/break/start'], async (req, res) => {
     try {
-        const employeeId = req.user?.employeeId;
+        const employeeId = await resolveEmployeeId(req);
         if (!employeeId) {
             return res.status(400).json({ success: false, error: 'User employee ID not found in session' });
         }
@@ -93,9 +129,10 @@ router.post(['/break-start', '/break/start'], async (req, res) => {
         return res.status(500).json({ success: false, error: 'Failed to start break' });
     }
 });
+
 router.post(['/break-end', '/break/end'], async (req, res) => {
     try {
-        const employeeId = req.user?.employeeId;
+        const employeeId = await resolveEmployeeId(req);
         if (!employeeId) {
             return res.status(400).json({ success: false, error: 'User employee ID not found in session' });
         }
@@ -110,9 +147,10 @@ router.post(['/break-end', '/break/end'], async (req, res) => {
         return res.status(500).json({ success: false, error: 'Failed to end break' });
     }
 });
+
 router.post('/check-out', async (req, res) => {
     try {
-        const employeeId = req.user?.employeeId;
+        const employeeId = await resolveEmployeeId(req);
         if (!employeeId) {
             return res.status(400).json({ success: false, error: 'User employee ID not found in session' });
         }
@@ -128,30 +166,73 @@ router.post('/check-out', async (req, res) => {
         return res.status(500).json({ success: false, error: 'Check-out failed' });
     }
 });
-router.get('/monthly', async (req, res) => {
+
+const handleMonthlyOrHistory = async (req, res) => {
     try {
-        let employeeId = req.user?.employeeId || req.user?.userId;
+        let employeeId = await resolveEmployeeId(req);
         if (req.query.employeeId) {
-            if (req.user?.role === 'EMPLOYEE' && req.query.employeeId !== req.user.employeeId && req.query.employeeId !== req.user.userId) {
-                return res.status(403).json({ success: false, error: 'Forbidden: Cannot view other employee monthly attendance' });
+            const targetEmpId = String(req.query.employeeId).toUpperCase();
+            if (req.user?.role === 'EMPLOYEE' && targetEmpId !== employeeId && req.query.employeeId !== req.user?.userId) {
+                return res.status(403).json({ success: false, error: 'Forbidden: Cannot view other employee attendance' });
             }
-            employeeId = req.query.employeeId;
+            employeeId = targetEmpId;
         }
-        const year = parseInt(req.query.year || new Date().getFullYear().toString(), 10);
-        const month = parseInt(req.query.month || (new Date().getMonth() + 1).toString(), 10);
-        const monthPrefix = `${year}-${String(month).padStart(2, '0')}`;
+
+        if (!employeeId) {
+            return res.status(400).json({ success: false, error: 'Employee ID could not be identified' });
+        }
+
+        const { monthPrefix } = parseYearAndMonth(req.query.year, req.query.month);
+
         await connectToDatabase();
         const records = await Attendance.find({
             employeeId,
             date: { $regex: `^${monthPrefix}` },
         }).sort({ date: 1 }).lean();
-        return res.json({ success: true, data: records });
+
+        let totalWorkingMinutes = 0;
+        let totalBreakMinutes = 0;
+        let presentDays = 0;
+        let completedDays = 0;
+
+        records.forEach((r) => {
+            totalWorkingMinutes += (r.totalWorkingMinutes || 0);
+            totalBreakMinutes += (r.totalBreakMinutes || 0);
+            if (['PRESENT', 'COMPLETED', 'ON_BREAK'].includes(r.status)) {
+                presentDays++;
+            }
+            if (r.status === 'COMPLETED') {
+                completedDays++;
+            }
+        });
+
+        const summary = {
+            totalDays: records.length,
+            presentDays,
+            completedDays,
+            totalWorkingMinutes,
+            totalBreakMinutes,
+        };
+
+        return res.json({
+            success: true,
+            data: {
+                records,
+                summary,
+            },
+            records,
+            summary,
+        });
     }
     catch (error) {
-        console.error('[API:Attendance:Monthly] Error:', error);
-        return res.status(500).json({ success: false, error: 'Failed to fetch monthly attendance' });
+        console.error('[API:Attendance:History] Error:', error);
+        return res.status(500).json({ success: false, error: 'Failed to fetch attendance history' });
     }
-});
+};
+
+router.get('/monthly', handleMonthlyOrHistory);
+router.get('/history', handleMonthlyOrHistory);
+
 router.get('/all', requireManagerOrAdmin, async (req, res) => {
     try {
         await connectToDatabase();
@@ -200,7 +281,8 @@ router.post('/correction', async (req, res) => {
         if (!attendance) {
             return res.status(404).json({ success: false, message: 'Attendance record not found' });
         }
-        if (req.user?.role === 'EMPLOYEE' && attendance.employeeId !== req.user?.employeeId && attendance.employeeId !== req.user?.userId) {
+        const userEmpId = await resolveEmployeeId(req);
+        if (req.user?.role === 'EMPLOYEE' && attendance.employeeId !== userEmpId && attendance.employeeId !== req.user?.userId) {
             return res.status(403).json({ success: false, message: 'Forbidden: Cannot submit correction for other employees' });
         }
         attendance.correction = {

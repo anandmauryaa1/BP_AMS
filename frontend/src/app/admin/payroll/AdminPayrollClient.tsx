@@ -102,6 +102,8 @@ export default function AdminPayrollClient() {
   const [ctcAmount, setCtcAmount] = useState<number>(600000);
   const [basicPct, setBasicPct] = useState<number>(50);
   const [hraPct, setHraPct] = useState<number>(20);
+  const [calculationType, setCalculationType] = useState<'HOURLY' | 'MONTHLY'>('HOURLY');
+  const [hourlyRate, setHourlyRate] = useState<number>(313);
   const [taxRegime, setTaxRegime] = useState<'NEW' | 'OLD' | 'NONE' | 'NA'>('NEW');
 
   // Component & Deduction ON/OFF Toggles
@@ -220,6 +222,8 @@ export default function AdminPayrollClient() {
           annualCtc: ctcAmount,
           basicPercentage: basicPct,
           hraPercentage: hraPct,
+          calculationType,
+          hourlyRate,
           regime: taxRegime,
           isPfEligible,
           isEsicEligible,
@@ -231,7 +235,7 @@ export default function AdminPayrollClient() {
         })
       });
       if (res.success) {
-        setMsg({ type: 'success', text: 'Salary structure updated with component toggles!' });
+        setMsg({ type: 'success', text: 'Salary structure updated with hourly calculation mode!' });
         setShowStructModal(false);
       } else {
         setMsg({ type: 'error', text: res.error || 'Failed to update structure.' });
@@ -247,9 +251,13 @@ export default function AdminPayrollClient() {
       const res: any = await apiFetch<any>(`/api/payroll/structure?employeeId=${empId}`);
       if (res.success && (res.structure || res.data)) {
         const s = res.structure || res.data;
-        setCtcAmount(s.annualCtc || s.ctc || 600000);
+        const ctc = s.annualCtc || s.ctc || 600000;
+        const gross = s.monthlyGross || Math.round(ctc / 12);
+        setCtcAmount(ctc);
         setBasicPct(s.basicPercentage || s.basicPct || 50);
         setHraPct(s.hraPercentage || s.hraPct || 20);
+        setCalculationType(s.calculationType || 'HOURLY');
+        setHourlyRate(s.hourlyRate || Math.round(gross / 160));
         setTaxRegime(s.regime || 'NEW');
         setIsPfEligible(s.isPfEligible !== undefined ? Boolean(s.isPfEligible) : true);
         setIsEsicEligible(s.isEsicEligible !== undefined ? Boolean(s.isEsicEligible) : false);
@@ -439,7 +447,7 @@ export default function AdminPayrollClient() {
                   <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 text-xs uppercase font-semibold border-b border-slate-200 dark:border-slate-800">
                     <tr>
                       <th className="px-4 py-3">Employee</th>
-                      <th className="px-4 py-3">Paid / LOP Days</th>
+                      <th className="px-4 py-3">Worked Hours / Days</th>
                       <th className="px-4 py-3">Gross Salary</th>
                       <th className="px-4 py-3">EPF</th>
                       <th className="px-4 py-3">ESIC</th>
@@ -450,14 +458,20 @@ export default function AdminPayrollClient() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                    {payrollRecords.map((r) => (
+                    {payrollRecords.map((r: any) => (
                       <tr key={r._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50">
                         <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">
                           {r.employeeId?.name || 'Employee'}
                           <span className="block text-xs text-slate-400 font-normal">{r.employeeId?.employeeId || r.employeeId?.email}</span>
                         </td>
                         <td className="px-4 py-3 text-slate-600 dark:text-slate-300">
-                          {r.paidDays} / {r.totalDays} ({r.lopDays} LOP)
+                          <div className="font-bold text-slate-900 dark:text-white">
+                            {r.totalWorkingHours || Math.round(((r.totalWorkingMinutes || 0) / 60) * 10) / 10 || 160} hrs
+                            {r.hourlyRate ? <span className="text-xs text-slate-500 font-mono ml-1">(@ ₹{r.hourlyRate}/hr)</span> : null}
+                          </div>
+                          <span className="text-[11px] text-slate-400 block">
+                            {r.paidDays} / {r.totalDays} Days ({r.lopDays} LOP)
+                          </span>
                         </td>
                         <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">
                           ₹{r.grossSalary?.toLocaleString('en-IN')}
@@ -887,14 +901,46 @@ export default function AdminPayrollClient() {
                 </select>
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">
+                    Annual CTC (₹) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={ctcAmount}
+                    onChange={(e) => {
+                      const newCtc = Number(e.target.value);
+                      setCtcAmount(newCtc);
+                      setHourlyRate(Math.round((newCtc / 12) / 160));
+                    }}
+                    required
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">
+                    Calculation Basis <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    value={calculationType}
+                    onChange={(e) => setCalculationType(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium text-slate-900 dark:text-white"
+                  >
+                    <option value="HOURLY">Hourly Rate Basis (₹/hr worked)</option>
+                    <option value="MONTHLY">Monthly Fixed Base (with LOP)</option>
+                  </select>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">
-                  Annual CTC (₹) <span className="text-rose-500">*</span>
+                  Hourly Rate (₹ / hour) <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="number"
-                  value={ctcAmount}
-                  onChange={(e) => setCtcAmount(Number(e.target.value))}
+                  value={hourlyRate}
+                  onChange={(e) => setHourlyRate(Number(e.target.value))}
                   required
                   className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium text-slate-900 dark:text-white"
                 />

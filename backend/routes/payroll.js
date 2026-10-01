@@ -67,6 +67,12 @@ router.post('/structure', requireManagerOrAdmin, async (req, res) => {
         const hra = req.body.hra ? parseFloat(req.body.hra) : Math.round(basic * hraPct);
         const specialAllowance = req.body.specialAllowance ? parseFloat(req.body.specialAllowance) : Math.max(0, monthlyGross - basic - hra);
 
+        const calculationType = req.body.calculationType || req.body.payType || 'HOURLY';
+        const standardHoursPerMonth = parseFloat(req.body.standardHoursPerMonth || req.body.standardHours || 160);
+        const hourlyRate = req.body.hourlyRate
+            ? parseFloat(req.body.hourlyRate)
+            : Math.round(monthlyGross / (standardHoursPerMonth || 160));
+
         const payload = {
             employeeId: empCode,
             userId: userIdStr,
@@ -76,6 +82,9 @@ router.post('/structure', requireManagerOrAdmin, async (req, res) => {
             basic,
             hra,
             specialAllowance,
+            calculationType,
+            hourlyRate,
+            standardHoursPerMonth,
             taxRegime: req.body.taxRegime || req.body.regime || 'NEW',
             isPfEligible: req.body.isPfEligible !== undefined ? Boolean(req.body.isPfEligible) : true,
             isEsicEligible: req.body.isEsicEligible !== undefined ? Boolean(req.body.isEsicEligible) : false,
