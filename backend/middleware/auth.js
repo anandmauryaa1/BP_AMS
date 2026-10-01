@@ -115,7 +115,11 @@ export async function authenticateToken(req, res, next) {
         if (dbUser.status !== 'ACTIVE') {
             return res.status(403).json({ success: false, error: 'Forbidden: Account is deactivated' });
         }
-        req.user = session;
+        req.user = {
+            ...session,
+            userId: session.userId || dbUser._id.toString(),
+            role: dbUser.role || session.role,
+        };
         next();
     }
     catch (error) {

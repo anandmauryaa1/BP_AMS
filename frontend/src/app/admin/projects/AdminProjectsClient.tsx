@@ -75,6 +75,11 @@ export default function AdminProjectsClient({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const getAuthHeaders = (): Record<string, string> => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   const fetchProjects = async (bust = false) => {
     try {
       setLoading(projects.length === 0);
@@ -87,7 +92,15 @@ export default function AdminProjectsClient({
       const cacheKey = `projects-${statusFilter}-${channelFilter}`;
       if (bust) invalidateCachePrefix('projects-');
 
-      const data = await cachedFetch(cacheKey, () => fetch(url).then(r => r.json()), 60);
+      const data = await cachedFetch(
+        cacheKey,
+        () =>
+          fetch(url, {
+            headers: getAuthHeaders(),
+            credentials: 'include',
+          }).then((r) => r.json()),
+        60
+      );
       const list = data.data?.projects || data.projects || (Array.isArray(data.data) ? data.data : []);
       setProjects(list);
     } catch (err) {
@@ -100,8 +113,24 @@ export default function AdminProjectsClient({
   const fetchMeta = async () => {
     try {
       const [chanData, empData] = await Promise.all([
-        cachedFetch('channels', () => fetch('/api/channels').then(r => r.json()), 120),
-        cachedFetch('employees', () => fetch('/api/admin/employees').then(r => r.json()), 120),
+        cachedFetch(
+          'channels',
+          () =>
+            fetch('/api/channels', {
+              headers: getAuthHeaders(),
+              credentials: 'include',
+            }).then((r) => r.json()),
+          120
+        ),
+        cachedFetch(
+          'employees',
+          () =>
+            fetch('/api/admin/employees', {
+              headers: getAuthHeaders(),
+              credentials: 'include',
+            }).then((r) => r.json()),
+          120
+        ),
       ]);
       const chanList = chanData.data?.channels || chanData.channels || [];
       const empList = empData.data?.employees || empData.employees || [];
@@ -127,7 +156,10 @@ export default function AdminProjectsClient({
       return;
     }
     try {
-      const res = await fetch(`/api/series?channelId=${channelId}`);
+      const res = await fetch(`/api/series?channelId=${channelId}`, {
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      });
       const data = await res.json();
       const list = data.data?.series || data.series || [];
       setSeriesList(list);
@@ -141,29 +173,55 @@ export default function AdminProjectsClient({
     setSaving(true);
     setError(null);
     try {
+      if (!form.title.trim()) {
+        throw new Error('Project title is required.');
+      }
+      if (!form.channelId) {
+        throw new Error('Please select a channel for this project.');
+      }
+
+      const formattedCode = form.code?.trim() ? form.code.trim().toUpperCase() : undefined;
       const payload: any = {
         title: form.title.trim(),
-        code: form.code.trim().toUpperCase(),
-        projectId: form.code.trim().toUpperCase(),
-        description: form.description?.trim() || undefined,
         channelId: form.channelId,
         channelIds: [form.channelId],
-        seriesId: form.seriesId || undefined,
-        leadAssigneeId: form.leadAssigneeId || undefined,
         priority: form.priority,
-        targetReleaseDate: form.targetReleaseDate || undefined,
-        tags: form.tags ? form.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
       };
+
+      if (formattedCode) {
+        payload.code = formattedCode;
+        payload.projectId = formattedCode;
+      }
+
+      if (form.description?.trim()) {
+        payload.description = form.description.trim();
+      }
+      if (form.seriesId && form.seriesId.trim()) {
+        payload.seriesId = form.seriesId.trim();
+      }
+      if (form.leadAssigneeId && form.leadAssigneeId.trim()) {
+        payload.leadAssigneeId = form.leadAssigneeId.trim();
+      }
+      if (form.targetReleaseDate) {
+        payload.targetReleaseDate = form.targetReleaseDate;
+      }
+      if (form.tags?.trim()) {
+        payload.tags = form.tags.split(',').map((t) => t.trim()).filter(Boolean);
+      }
 
       const res = await fetch('/api/projects', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
         body: JSON.stringify(payload),
       });
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        throw new Error(data.message || data.error || 'Failed to create project');
+        throw new Error(data.error || data.message || 'Failed to create project');
       }
 
       setForm({

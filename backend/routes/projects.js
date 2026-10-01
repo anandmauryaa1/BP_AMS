@@ -35,10 +35,47 @@ router.get('/', publicCache(300, 600), async (req, res) => {
 router.post('/', requireManagerOrAdmin, async (req, res) => {
     try {
         await connectToDatabase();
-        const project = await Project.create({
-            ...req.body,
-            createdBy: req.user?.userId,
-        });
+        const payload = { ...req.body };
+
+        if (!payload.title || typeof payload.title !== 'string' || !payload.title.trim()) {
+            return res.status(400).json({ success: false, error: 'Project title is required' });
+        }
+        payload.title = payload.title.trim();
+
+        // Clean empty string ObjectIds to prevent Mongoose CastErrors
+        if (!payload.channelId || payload.channelId === '') {
+            delete payload.channelId;
+        }
+        if (Array.isArray(payload.channelIds)) {
+            payload.channelIds = payload.channelIds.filter(id => id && typeof id === 'string' && id.trim() !== '');
+            if (payload.channelIds.length === 0) delete payload.channelIds;
+        }
+        if (!payload.seriesId || payload.seriesId === '') {
+            delete payload.seriesId;
+        }
+        if (!payload.leadAssigneeId || payload.leadAssigneeId === '') {
+            delete payload.leadAssigneeId;
+        }
+        if (!payload.code || typeof payload.code !== 'string' || payload.code.trim() === '') {
+            delete payload.code;
+        } else {
+            payload.code = payload.code.trim().toUpperCase();
+        }
+        if (!payload.projectId || typeof payload.projectId !== 'string' || payload.projectId.trim() === '') {
+            delete payload.projectId;
+        } else {
+            payload.projectId = payload.projectId.trim().toUpperCase();
+        }
+
+        payload.createdBy = req.user?.userId || req.user?.employeeId || payload.createdBy;
+        if (!payload.managerId && req.user?.userId) {
+            payload.managerId = req.user.userId;
+        }
+        if (!payload.managerName && req.user?.name) {
+            payload.managerName = req.user.name;
+        }
+
+        const project = await Project.create(payload);
         return res.status(201).json({ success: true, data: project });
     }
     catch (error) {
@@ -68,7 +105,15 @@ router.get('/:id', publicCache(300, 600), async (req, res) => {
 const handleUpdateProject = async (req, res) => {
     try {
         await connectToDatabase();
-        const updated = await Project.findByIdAndUpdate(req.params.id, req.body, { new: true })
+        const updateData = { ...req.body };
+        if (updateData.channelId === '') updateData.channelId = null;
+        if (updateData.seriesId === '') updateData.seriesId = null;
+        if (updateData.leadAssigneeId === '') updateData.leadAssigneeId = null;
+        if (Array.isArray(updateData.channelIds)) {
+            updateData.channelIds = updateData.channelIds.filter(id => id && typeof id === 'string' && id.trim() !== '');
+        }
+
+        const updated = await Project.findByIdAndUpdate(req.params.id, updateData, { new: true })
             .populate('managerId', 'name employeeId email')
             .populate('leadAssigneeId', 'name employeeId email department')
             .populate('teamMembers', 'name employeeId email department');

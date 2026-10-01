@@ -41,6 +41,7 @@ const ProjectSchema = new Schema({
     targetReleaseDate: { type: Date },
     publishTargetDate: { type: Date },
     teamMembers: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+    tags: [{ type: String, trim: true }],
     createdBy: { type: Schema.Types.Mixed },
 }, { timestamps: true });
 ProjectSchema.index({ status: 1, priority: 1 });

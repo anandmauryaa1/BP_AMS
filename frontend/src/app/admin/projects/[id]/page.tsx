@@ -50,6 +50,11 @@ export default function AdminProjectDetailPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const getAuthHeaders = (): Record<string, string> => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   // Deliverable form
   const [deliverableForm, setDeliverableForm] = useState({
     title: '',
@@ -75,10 +80,10 @@ export default function AdminProjectDetailPage() {
     try {
       setLoading(true);
       const [projRes, delivRes, taskRes, empRes] = await Promise.all([
-        fetch(`/api/projects/${projectId}`),
-        fetch(`/api/deliverables?projectId=${projectId}`),
-        fetch(`/api/tasks?projectId=${projectId}`),
-        fetch('/api/admin/employees'),
+        fetch(`/api/projects/${projectId}`, { headers: getAuthHeaders(), credentials: 'include' }),
+        fetch(`/api/deliverables?projectId=${projectId}`, { headers: getAuthHeaders(), credentials: 'include' }),
+        fetch(`/api/tasks?projectId=${projectId}`, { headers: getAuthHeaders(), credentials: 'include' }),
+        fetch('/api/admin/employees', { headers: getAuthHeaders(), credentials: 'include' }),
       ]);
 
       const projData = await projRes.json();
@@ -112,7 +117,8 @@ export default function AdminProjectDetailPage() {
     try {
       const res = await fetch(`/api/projects/${projectId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ status: newStatus }),
       });
       if (res.ok) {
@@ -127,7 +133,8 @@ export default function AdminProjectDetailPage() {
     try {
       const res = await fetch(`/api/projects/${projectId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ leadAssigneeId: leadAssigneeId || null }),
       });
       if (res.ok) {
@@ -160,7 +167,8 @@ export default function AdminProjectDetailPage() {
 
       const res = await fetch('/api/deliverables', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(payload),
       });
 
@@ -202,7 +210,8 @@ export default function AdminProjectDetailPage() {
 
       const res = await fetch('/api/tasks', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(payload),
       });
 
@@ -231,7 +240,8 @@ export default function AdminProjectDetailPage() {
     try {
       const res = await fetch(`/api/tasks/${taskId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ status: newStatus }),
       });
       if (res.ok) {
