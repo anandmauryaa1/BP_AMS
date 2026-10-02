@@ -311,13 +311,20 @@ export const PushNotificationManager: React.FC<PushNotificationManagerProps> = (
         <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-1.5">
           <span>🔊 Audio Chimes & Event Sounds Preview</span>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+          <button
+            type="button"
+            onClick={() => soundService.playTaskAlertSound()}
+            className="px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/30 text-xs font-semibold flex items-center justify-center gap-1 transition-colors"
+          >
+            <span>📋 Task Alert</span>
+          </button>
           <button
             type="button"
             onClick={() => soundService.playNotificationSound()}
             className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-1 transition-colors"
           >
-            <span>🔔 Alert Sound</span>
+            <span>🔔 Notification</span>
           </button>
           <button
             type="button"
@@ -329,7 +336,7 @@ export const PushNotificationManager: React.FC<PushNotificationManagerProps> = (
           <button
             type="button"
             onClick={() => soundService.playCheckOutSound()}
-            className="px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-semibold flex items-center justify-center gap-1 transition-colors"
+            className="px-2.5 py-1.5 rounded-lg bg-slate-500/10 hover:bg-slate-500/20 text-slate-400 border border-slate-500/30 text-xs font-semibold flex items-center justify-center gap-1 transition-colors"
           >
             <span>🔴 Check-Out</span>
           </button>

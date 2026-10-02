@@ -2,13 +2,12 @@ import { Router } from 'express';
 import { connectToDatabase } from '../db.js';
 import { Project } from '../models/Project.js';
 import { authenticateToken, requireManagerOrAdmin } from '../middleware/auth.js';
-import { publicCache } from '../middleware/cacheControl.js';
+import { realTimeService } from '../services/RealTimeService.js';
 
 const router = Router();
 router.use(authenticateToken);
 
-router.get('/', publicCache(300, 600), async (req, res) => {
-
+router.get('/', async (req, res) => {
     try {
         await connectToDatabase();
         const { status, category, department } = req.query;
@@ -76,6 +75,14 @@ router.post('/', requireManagerOrAdmin, async (req, res) => {
         }
 
         const project = await Project.create(payload);
+        try {
+            realTimeService.broadcast('PROJECT_CREATED', {
+                project,
+                createdBy: req.user,
+            });
+        } catch (rtErr) {
+            console.warn('[RealTime:ProjectCreate] Non-fatal broadcast error:', rtErr);
+        }
         return res.status(201).json({ success: true, data: project });
     }
     catch (error) {
@@ -83,8 +90,7 @@ router.post('/', requireManagerOrAdmin, async (req, res) => {
         return res.status(500).json({ success: false, error: error.message || 'Failed to create project' });
     }
 });
-router.get('/:id', publicCache(300, 600), async (req, res) => {
-
+router.get('/:id', async (req, res) => {
     try {
         await connectToDatabase();
         const project = await Project.findById(req.params.id)
@@ -120,6 +126,20 @@ const handleUpdateProject = async (req, res) => {
         if (!updated) {
             return res.status(404).json({ success: false, error: 'Project not found' });
         }
+
+        // Broadcast real-time update across all connected users
+        try {
+            realTimeService.broadcast('PROJECT_UPDATED', {
+                project: updated,
+                projectId: updated._id,
+                updatedBy: req.user,
+                status: updated.status,
+                leadAssigneeId: updated.leadAssigneeId,
+            });
+        } catch (rtErr) {
+            console.warn('[RealTime:ProjectUpdate] Non-fatal broadcast error:', rtErr);
+        }
+
         return res.json({ success: true, data: updated });
     }
     catch (error) {
@@ -136,6 +156,14 @@ router.delete('/:id', requireManagerOrAdmin, async (req, res) => {
         const deleted = await Project.findByIdAndDelete(req.params.id);
         if (!deleted) {
             return res.status(404).json({ success: false, error: 'Project not found' });
+        }
+        try {
+            realTimeService.broadcast('PROJECT_DELETED', {
+                projectId: req.params.id,
+                deletedBy: req.user,
+            });
+        } catch (rtErr) {
+            console.warn('[RealTime:ProjectDelete] Non-fatal broadcast error:', rtErr);
         }
         return res.json({ success: true, message: 'Project deleted successfully' });
     }

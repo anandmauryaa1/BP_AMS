@@ -6,6 +6,7 @@ import { User } from '../models/User.js';
 import { authenticateToken, requireManagerOrAdmin } from '../middleware/auth.js';
 import { recordTaskEvent, recordReviewEvent } from '../services/events.js';
 import { notifyTaskScheduled, notifyTaskStatusUpdate, notifyTaskRescheduled, notifyTaskReassigned, } from '../services/pushNotification.js';
+import { realTimeService } from '../services/RealTimeService.js';
 import { escapeRegExp, resolveUserObjectId } from '../utils/index.js';
 const router = Router();
 router.use(authenticateToken);
@@ -56,6 +57,11 @@ router.post('/', requireManagerOrAdmin, async (req, res) => {
     try {
         await connectToDatabase();
         const taskData = { ...req.body };
+        // Map frontend type to taskType
+        if (taskData.type && !taskData.taskType) {
+            taskData.taskType = taskData.type;
+        }
+        delete taskData.type;
 
         // 1. Auto-generate unique taskId if missing
         if (!taskData.taskId) {
@@ -131,6 +137,24 @@ router.post('/', requireManagerOrAdmin, async (req, res) => {
         catch (pushErr) {
             console.warn('[PushNotification:Task] Non-fatal notification error:', pushErr);
         }
+        // Broadcast real-time synchronous update across all client screens
+        try {
+            realTimeService.broadcast('TASK_CREATED', {
+                task,
+                creator: req.user,
+                assignedTo: task.assignedTo,
+                projectId: task.projectId,
+            });
+            if (task.assignedTo) {
+                realTimeService.sendToUser(String(task.assignedTo), 'TASK_ASSIGNED', {
+                    task,
+                    creator: req.user,
+                });
+            }
+        } catch (rtErr) {
+            console.warn('[RealTime:TaskCreate] Non-fatal broadcast error:', rtErr);
+        }
+
         return res.status(201).json({
             success: true,
             message: 'Task scheduled successfully. Assigned staff and managers have been notified.',
@@ -170,6 +194,10 @@ const handleUpdateTask = async (req, res) => {
         }
         const oldStatus = oldTask.status;
         const updates = { ...req.body };
+        if (updates.type && !updates.taskType) {
+            updates.taskType = updates.type;
+        }
+        delete updates.type;
 
         const rawAssignee = updates.assignedTo !== undefined ? updates.assignedTo : updates.assigneeId;
         if (rawAssignee !== undefined) {
@@ -293,6 +321,26 @@ const handleUpdateTask = async (req, res) => {
                 console.warn('[PushNotification:TaskReschedule] Non-fatal notification error:', pushErr);
             }
         }
+        // Broadcast real-time synchronous update across all connected clients
+        try {
+            realTimeService.broadcast('TASK_UPDATED', {
+                task: updatedTask,
+                taskId: updatedTask._id,
+                projectId: updatedTask.projectId?._id || updatedTask.projectId,
+                assignedTo: updatedTask.assignedTo?._id || updatedTask.assignedTo,
+                status: updatedTask.status,
+                updatedBy: req.user,
+            });
+            if (updates.assignedTo && String(updates.assignedTo) !== String(oldTask.assignedTo)) {
+                realTimeService.sendToUser(String(updates.assignedTo), 'TASK_ASSIGNED', {
+                    task: updatedTask,
+                    reassignedBy: req.user,
+                });
+            }
+        } catch (rtErr) {
+            console.warn('[RealTime:TaskUpdate] Non-fatal broadcast error:', rtErr);
+        }
+
         return res.json({
             success: true,
             message: 'Task updated successfully and notifications dispatched.',
@@ -315,6 +363,15 @@ router.delete('/:id', requireManagerOrAdmin, async (req, res) => {
         const deleted = await Task.findByIdAndDelete(req.params.id);
         if (!deleted) {
             return res.status(404).json({ success: false, error: 'Task not found' });
+        }
+        try {
+            realTimeService.broadcast('TASK_DELETED', {
+                taskId: req.params.id,
+                projectId: deleted.projectId,
+                deletedBy: req.user,
+            });
+        } catch (rtErr) {
+            console.warn('[RealTime:TaskDelete] Non-fatal broadcast error:', rtErr);
         }
         return res.json({ success: true, message: 'Task deleted successfully' });
     }

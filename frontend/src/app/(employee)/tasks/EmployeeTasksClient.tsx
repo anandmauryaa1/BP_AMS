@@ -22,6 +22,8 @@ import {
 } from 'lucide-react';
 import { ITask, SessionPayload, TaskStatus } from '@/types';
 import { formatDate } from '@/lib/utils';
+import { useRealTimeEvent } from '@/context/RealTimeContext';
+import { soundService } from '@/lib/audioSound';
 
 export default function EmployeeTasksClient({ initialTasks = [] }: { initialTasks?: any[] }) {
   const [user, setUser] = useState<SessionPayload | null>(null);
@@ -68,6 +70,37 @@ export default function EmployeeTasksClient({ initialTasks = [] }: { initialTask
   useEffect(() => {
     fetchTasks();
   }, [fetchTasks]);
+
+  // Real-time synchronization
+  useRealTimeEvent('TASK_CREATED', (newTask) => {
+    if (!newTask) return;
+    const currentUserId = (user as any)?._id || user?.userId || (user as any)?.id;
+    const assignedId = newTask.assignedTo?._id || newTask.assignedTo || newTask.assigneeId;
+    if (assignedId && currentUserId && assignedId.toString() === currentUserId.toString()) {
+      soundService.playTaskAlertSound();
+      showToast(`⚡ New task assigned to you: "${newTask.title}"`, 'success');
+    }
+    fetchTasks();
+  });
+
+  useRealTimeEvent('TASK_ASSIGNED', (assignedTask) => {
+    if (!assignedTask) return;
+    const currentUserId = (user as any)?._id || user?.userId || (user as any)?.id;
+    const assignedId = assignedTask.assignedTo?._id || assignedTask.assignedTo || assignedTask.assigneeId;
+    if (assignedId && currentUserId && assignedId.toString() === currentUserId.toString()) {
+      soundService.playTaskAlertSound();
+      showToast(`⚡ You were assigned task: "${assignedTask.title}"`, 'success');
+    }
+    fetchTasks();
+  });
+
+  useRealTimeEvent('TASK_UPDATED', () => {
+    fetchTasks();
+  });
+
+  useRealTimeEvent('TASK_DELETED', () => {
+    fetchTasks();
+  });
 
   const handlePickTask = async (taskId: string) => {
     try {

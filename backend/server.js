@@ -26,6 +26,7 @@ import payrollRouter from './routes/payroll.js';
 import complianceRouter from './routes/compliance.js';
 import hcmRouter from './routes/hcm.js';
 import settingsRouter from './routes/settings.js';
+import realtimeRouter from './routes/realtime.js';
 import { User } from './models/User.js';
 import { authenticateToken } from './middleware/auth.js';
 
@@ -112,6 +113,7 @@ app.use('/api/payroll', payrollRouter);
 app.use('/api/compliance', complianceRouter);
 app.use('/api/hcm', hcmRouter);
 app.use('/api/settings', settingsRouter);
+app.use('/api/realtime', realtimeRouter);
 
 // --- USERS LIST ENDPOINT ---
 app.get(['/api/users', '/api/users/list'], authenticateToken, async (req, res) => {

@@ -23,7 +23,7 @@ const TaskSchema = new Schema({
     assignedByName: { type: String },
     status: {
         type: String,
-        enum: ['TODO', 'IN_PROGRESS', 'BLOCKED', 'READY_FOR_REVIEW', 'REVISION', 'COMPLETED', 'CANCELLED'],
+        enum: ['TODO', 'IN_PROGRESS', 'BLOCKED', 'READY_FOR_REVIEW', 'IN_REVIEW', 'REVISION', 'CHANGES_REQUESTED', 'APPROVED', 'COMPLETED', 'CANCELLED'],
         default: 'TODO',
     },
     priority: { type: String, enum: ['LOW', 'MEDIUM', 'HIGH', 'URGENT'], default: 'MEDIUM' },

@@ -25,6 +25,7 @@ import {
   Tv,
   Palmtree,
   Bell,
+  BellRing,
   Banknote,
   FileCheck,
   FolderOpen,
@@ -38,7 +39,17 @@ import { Badge } from '@/components/ui/Badge';
 import { PushNotificationManager } from '@/components/PushNotificationManager';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { ADMIN_NAV_CATEGORIES } from '@/components/AdminNav';
+import { soundService } from '@/lib/audioSound';
 import { cn } from '@/lib/utils';
+import { useRealTimeEvent } from '@/context/RealTimeContext';
+
+interface ToastNotification {
+  id: string;
+  title: string;
+  message: string;
+  link?: string;
+  type?: string;
+}
 
 export interface NavSubItem {
   href: string;
@@ -105,7 +116,71 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const [activeEmployeeCategory, setActiveEmployeeCategory] = useState<string | null>(null);
+  const [activeToast, setActiveToast] = useState<ToastNotification | null>(null);
+  const [hasNewAlertAnimation, setHasNewAlertAnimation] = useState(false);
   const empNavRef = useRef<HTMLDivElement>(null);
+  const knownNotificationIdsRef = useRef<Set<string>>(new Set());
+  const initialFetchDoneRef = useRef<boolean>(false);
+
+  // Function to fetch latest notifications & trigger sound for newly arrived items
+  const fetchLatestNotifications = async (triggerAlertSound = true) => {
+    if (!currentUser) return;
+    try {
+      const token = typeof window !== 'undefined' ? (localStorage.getItem('auth_token') || localStorage.getItem('token')) : null;
+      const res = await fetch('/api/notifications', {
+        credentials: 'include',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const data = await res.json();
+      if (data.success && data.data) {
+        const list: any[] = Array.isArray(data.data) ? data.data : (data.data.notifications || []);
+        const unread = typeof data.data.unreadCount === 'number'
+          ? data.data.unreadCount
+          : list.filter((n: any) => !n.read && !n.isRead).length;
+
+        // Check if there are newly arrived unread notifications
+        if (initialFetchDoneRef.current && triggerAlertSound) {
+          const newUnreadItems = list.filter(
+            (n: any) => (!n.read && !n.isRead) && !knownNotificationIdsRef.current.has(String(n._id))
+          );
+
+          if (newUnreadItems.length > 0) {
+            const latest = newUnreadItems[0];
+            // If it's a task assigned or scheduled, play the dedicated task alert chime!
+            if (latest.type === 'TASK_ASSIGNED' || latest.type === 'TASK_DUE') {
+              soundService.playTaskAlertSound();
+            } else {
+              soundService.playNotificationSound();
+            }
+
+            // Trigger pulsing bell animation
+            setHasNewAlertAnimation(true);
+            setTimeout(() => setHasNewAlertAnimation(false), 3500);
+
+            // Show floating interactive toast
+            setActiveToast({
+              id: String(latest._id),
+              title: latest.title,
+              message: latest.message,
+              link: latest.link || (pathname.startsWith('/admin') ? '/admin/tasks' : '/tasks'),
+              type: latest.type,
+            });
+          }
+        }
+
+        // Register all current notification IDs
+        list.forEach((n: any) => {
+          if (n._id) knownNotificationIdsRef.current.add(String(n._id));
+        });
+
+        initialFetchDoneRef.current = true;
+        setNotifications(list);
+        setUnreadCount(unread);
+      }
+    } catch {
+      // Background poll failure is silent
+    }
+  };
 
   // Sync user prop or fetch session
   useEffect(() => {
@@ -138,6 +213,105 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
     }
   }, [user]);
 
+  // Initial fetch and periodic polling for notifications (every 12 seconds)
+  useEffect(() => {
+    if (!currentUser) return;
+    
+    // Initial fetch (without playing sound for past notifications)
+    fetchLatestNotifications(false);
+
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchLatestNotifications(true);
+      }
+    }, 12000);
+
+    // Listen to service worker push notification broadcast
+    const handleServiceWorkerMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'PUSH_NOTIFICATION_RECEIVED') {
+        const payload = event.data.payload;
+        if (payload?.tag === 'TASK_ASSIGNED' || payload?.tag === 'TASK_DUE') {
+          soundService.playTaskAlertSound();
+        } else {
+          soundService.playNotificationSound();
+        }
+        setHasNewAlertAnimation(true);
+        setTimeout(() => setHasNewAlertAnimation(false), 3500);
+        if (payload) {
+          setActiveToast({
+            id: String(Date.now()),
+            title: payload.title || 'New Task Notification',
+            message: payload.body || 'A new task was assigned to you.',
+            link: payload.url || '/tasks',
+            type: payload.tag,
+          });
+        }
+        fetchLatestNotifications(false);
+      }
+    };
+
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage);
+    }
+
+    return () => {
+      clearInterval(interval);
+      if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+        navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
+      }
+    };
+  }, [currentUser]);
+
+  // Real-time synchronization
+  useRealTimeEvent('NOTIFICATION_NEW', (notif) => {
+    if (!currentUser) return;
+    const targetUserId = notif?.user || notif?.userId || notif?.recipientId;
+    const myId = (currentUser as any)?._id || currentUser?.userId || (currentUser as any)?.id;
+    if (!targetUserId || targetUserId.toString() === myId?.toString()) {
+      soundService.playNotificationSound();
+      setHasNewAlertAnimation(true);
+      setTimeout(() => setHasNewAlertAnimation(false), 3500);
+      if (notif) {
+        setActiveToast({
+          id: String(Date.now()),
+          title: notif.title || 'New Notification',
+          message: notif.message || notif.body || 'You have a new update.',
+          link: notif.link || '/notifications',
+          type: notif.type,
+        });
+      }
+      fetchLatestNotifications(false);
+    }
+  });
+
+  useRealTimeEvent('TASK_ASSIGNED', (task) => {
+    if (!currentUser) return;
+    const assignedId = task?.assignedTo?._id || task?.assignedTo || task?.assigneeId;
+    const myId = (currentUser as any)?._id || currentUser?.userId || (currentUser as any)?.id;
+    if (assignedId && myId && assignedId.toString() === myId.toString()) {
+      soundService.playTaskAlertSound();
+      setHasNewAlertAnimation(true);
+      setTimeout(() => setHasNewAlertAnimation(false), 3500);
+      setActiveToast({
+        id: String(Date.now()),
+        title: 'Task Assigned',
+        message: `You were assigned: "${task.title || 'New Task'}"`,
+        link: '/tasks',
+        type: 'TASK_ASSIGNED',
+      });
+      fetchLatestNotifications(false);
+    }
+  });
+
+  // Auto-dismiss active toast after 8 seconds
+  useEffect(() => {
+    if (!activeToast) return;
+    const timer = setTimeout(() => {
+      setActiveToast(null);
+    }, 8000);
+    return () => clearTimeout(timer);
+  }, [activeToast]);
+
   // Close menus on route change
   useEffect(() => {
     setIsMobileMenuOpen(false);
@@ -167,29 +341,6 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
       document.body.style.overflow = 'unset';
     };
   }, [isMobileMenuOpen]);
-
-  // Fetch notifications
-  useEffect(() => {
-    if (currentUser) {
-      const token = typeof window !== 'undefined' ? (localStorage.getItem('auth_token') || localStorage.getItem('token')) : null;
-      fetch('/api/notifications', {
-        credentials: 'include',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.success && data.data) {
-            const list = Array.isArray(data.data) ? data.data : (data.data.notifications || []);
-            const unread = typeof data.data.unreadCount === 'number'
-              ? data.data.unreadCount
-              : list.filter((n: any) => !n.read && !n.isRead).length;
-            setNotifications(list);
-            setUnreadCount(unread);
-          }
-        })
-        .catch(() => {});
-    }
-  }, [currentUser]);
 
   const markNotificationsAsRead = async () => {
     setShowNotifications(!showNotifications);
@@ -383,11 +534,21 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
                     <button
                       onClick={markNotificationsAsRead}
                       aria-label="Notifications"
-                      className="p-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors relative"
+                      className={cn(
+                        'p-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-all relative',
+                        hasNewAlertAnimation && 'ring-2 ring-rose-500 bg-rose-50 dark:bg-rose-950/60 text-rose-600 animate-bounce'
+                      )}
+                      title={unreadCount > 0 ? `${unreadCount} unread notification(s)` : 'Notifications'}
                     >
-                      <Bell className="w-4 h-4" />
+                      {hasNewAlertAnimation ? (
+                        <BellRing className="w-4 h-4 text-rose-600 dark:text-rose-400 animate-pulse" />
+                      ) : (
+                        <Bell className="w-4 h-4" />
+                      )}
                       {unreadCount > 0 && (
-                        <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-600 rounded-full ring-2 ring-white dark:ring-slate-900" />
+                        <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-rose-600 text-[10px] font-bold text-white rounded-full flex items-center justify-center ring-2 ring-white dark:ring-slate-900 shadow-sm animate-pulse">
+                          {unreadCount > 9 ? '9+' : unreadCount}
+                        </span>
                       )}
                     </button>
 
@@ -610,6 +771,55 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
                 </button>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Live Real-Time Notification Toast Alert */}
+      {activeToast && (
+        <div className="fixed top-20 right-4 z-50 max-w-sm w-full bg-slate-900/95 dark:bg-zinc-900/95 backdrop-blur-md text-white p-4 rounded-2xl shadow-2xl border border-rose-500/40 shadow-rose-500/10 flex items-start gap-3 animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="w-9 h-9 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center flex-shrink-0 border border-rose-500/30">
+            {activeToast.type === 'TASK_ASSIGNED' ? (
+              <CheckSquare className="w-5 h-5 animate-pulse" />
+            ) : (
+              <BellRing className="w-5 h-5 animate-pulse" />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-1">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-rose-400 flex items-center gap-1">
+                <span>⚡ Real-Time Alert</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setActiveToast(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-md transition-colors"
+                title="Dismiss"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            <h4 className="text-xs font-bold text-white mt-0.5 line-clamp-1">{activeToast.title}</h4>
+            <p className="text-[11px] text-slate-300 mt-0.5 line-clamp-2 leading-relaxed">{activeToast.message}</p>
+            {activeToast.link && (
+              <div className="mt-2.5 flex items-center gap-2">
+                <Link
+                  href={activeToast.link}
+                  onClick={() => setActiveToast(null)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-semibold transition-all shadow-sm shadow-rose-600/30"
+                >
+                  <span>Open Task</span>
+                  <ChevronRight className="w-3 h-3" />
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setActiveToast(null)}
+                  className="text-[11px] text-slate-400 hover:text-slate-200 px-2 py-1 font-medium transition-colors"
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

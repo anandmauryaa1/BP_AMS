@@ -40,6 +40,7 @@ import {
   Priority,
 } from '@/types';
 import { formatDate } from '@/lib/utils';
+import { useRealTimeEvent } from '@/context/RealTimeContext';
 
 export default function AdminProjectDetailPage() {
   const params = useParams();
@@ -154,6 +155,81 @@ export default function AdminProjectDetailPage() {
     if (projectId) fetchProjectData();
   }, [projectId]);
 
+  // Real-time synchronization
+  useRealTimeEvent('PROJECT_UPDATED', (updatedProj) => {
+    if (!updatedProj) return;
+    const incomingId = updatedProj._id || updatedProj.id;
+    if (incomingId === projectId) {
+      setProject((prev: any) => ({ ...prev, ...updatedProj }));
+    }
+  });
+
+  useRealTimeEvent('PROJECT_DELETED', (deletedData) => {
+    const incomingId = deletedData?._id || deletedData?.id || deletedData?.projectId;
+    if (incomingId === projectId) {
+      router.push('/admin/projects');
+    }
+  });
+
+  useRealTimeEvent('TASK_CREATED', (newTask) => {
+    if (!newTask) return;
+    const taskProjId = newTask.project?._id || newTask.project || newTask.projectId;
+    if (taskProjId === projectId) {
+      setTasks((prev) => {
+        const exists = prev.some((t) => t._id === newTask._id);
+        if (exists) return prev.map((t) => (t._id === newTask._id ? { ...t, ...newTask } : t));
+        return [newTask, ...prev];
+      });
+    }
+  });
+
+  useRealTimeEvent('TASK_UPDATED', (updatedTask) => {
+    if (!updatedTask) return;
+    setTasks((prev) =>
+      prev.map((t) => (t._id === updatedTask._id ? { ...t, ...updatedTask } : t))
+    );
+  });
+
+  useRealTimeEvent('TASK_ASSIGNED', (assignedTask) => {
+    if (!assignedTask) return;
+    setTasks((prev) =>
+      prev.map((t) => (t._id === assignedTask._id ? { ...t, ...assignedTask } : t))
+    );
+  });
+
+  useRealTimeEvent('TASK_DELETED', (deletedTask) => {
+    const taskId = deletedTask?._id || deletedTask?.taskId;
+    if (taskId) {
+      setTasks((prev) => prev.filter((t) => t._id !== taskId));
+    }
+  });
+
+  useRealTimeEvent('DELIVERABLE_CREATED', (newDeliv) => {
+    if (!newDeliv) return;
+    const delivProjId = newDeliv.project?._id || newDeliv.project || newDeliv.projectId;
+    if (delivProjId === projectId) {
+      setDeliverables((prev) => {
+        const exists = prev.some((d) => d._id === newDeliv._id);
+        if (exists) return prev.map((d) => (d._id === newDeliv._id ? { ...d, ...newDeliv } : d));
+        return [...prev, newDeliv];
+      });
+    }
+  });
+
+  useRealTimeEvent('DELIVERABLE_UPDATED', (updatedDeliv) => {
+    if (!updatedDeliv) return;
+    setDeliverables((prev) =>
+      prev.map((d) => (d._id === updatedDeliv._id ? { ...d, ...updatedDeliv } : d))
+    );
+  });
+
+  useRealTimeEvent('DELIVERABLE_DELETED', (deletedDeliv) => {
+    const delivId = deletedDeliv?._id || deletedDeliv?.deliverableId;
+    if (delivId) {
+      setDeliverables((prev) => prev.filter((d) => d._id !== delivId));
+    }
+  });
+
   const handleUpdateStatus = async (newStatus: string) => {
     try {
       const res = await fetch(`/api/projects/${projectId}`, {
@@ -180,10 +256,34 @@ export default function AdminProjectDetailPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        setProject(data.data || { ...project, leadAssigneeId: employees.find((e) => e._id === leadAssigneeId) });
+        const updatedLeadObj = employees.find((e) => e._id === leadAssigneeId);
+        setProject((prev: any) => ({
+          ...prev,
+          ...(data.data || {}),
+          leadAssigneeId: updatedLeadObj || (leadAssigneeId ? { _id: leadAssigneeId, name: 'Assigned' } : null),
+        }));
       }
     } catch (err) {
       console.error('Failed to update lead assignee:', err);
+    }
+  };
+
+  const handleUpdateTaskAssignee = async (taskId: string, assigneeId: string) => {
+    try {
+      const res = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ assignedTo: assigneeId || 'unassigned', assigneeId: assigneeId || 'unassigned' }),
+      });
+      if (res.ok) {
+        const assignedEmp = employees.find((e) => e._id === assigneeId);
+        setTasks((prev) =>
+          prev.map((t) => (t._id === taskId ? { ...t, assignedTo: assignedEmp || (assigneeId ? { _id: assigneeId, name: 'Assigned' } : null) } : t))
+        );
+      }
+    } catch (err) {
+      console.error('Failed to update task assignee:', err);
     }
   };
 
@@ -499,7 +599,14 @@ export default function AdminProjectDetailPage() {
             {project.leadAssigneeId && (
               <div className="flex items-center gap-1.5">
                 <User className="w-3.5 h-3.5 text-muted-foreground" />
-                <span>Lead: <b className="text-foreground">{project.leadAssigneeId.name}</b></span>
+                <span>
+                  Lead:{' '}
+                  <b className="text-foreground">
+                    {typeof project.leadAssigneeId === 'object'
+                      ? project.leadAssigneeId.name || project.leadAssigneeId.employeeId || 'Assigned'
+                      : employees.find((e) => e._id === project.leadAssigneeId || e.employeeId === project.leadAssigneeId)?.name || 'Assigned'}
+                  </b>
+                </span>
               </div>
             )}
             {project.targetReleaseDate && (
@@ -794,17 +901,32 @@ export default function AdminProjectDetailPage() {
                               {task.type?.replace(/_/g, ' ') || task.taskType?.replace(/_/g, ' ')}
                             </span>
                           </div>
-                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                            {task.assigneeId || task.assignedTo ? (
-                              <span className="text-foreground font-medium">👤 {task.assigneeId?.name || task.assignedTo?.name || 'Assigned'}</span>
-                            ) : (
-                              <span className="text-muted-foreground">Unassigned</span>
-                            )}
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground pt-0.5">
+                            {/* Assignee Switcher */}
+                            <select
+                              value={task.assignedTo?._id || task.assignedTo || task.assigneeId?._id || task.assigneeId || ''}
+                              onChange={(e) => handleUpdateTaskAssignee(task._id, e.target.value)}
+                              className="px-2 py-0.5 rounded bg-muted text-foreground text-[11px] font-medium border border-border focus:outline-none focus:ring-1 focus:ring-red-500"
+                            >
+                              <option value="">👤 Unassigned</option>
+                              {employees.map((emp) => (
+                                <option key={emp._id} value={emp._id}>
+                                  👤 {emp.name}
+                                </option>
+                              ))}
+                            </select>
+
                             {(task.estimatedMinutes || task.estimatedHours) && (
                               <span>⏱️ {task.estimatedMinutes ? `${task.estimatedMinutes}m` : `${task.estimatedHours}h`}</span>
                             )}
-                            {task.priority === 'URGENT' && (
-                              <span className="text-red-500 font-bold">URGENT</span>
+                            {task.priority && (
+                              <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
+                                task.priority === 'URGENT' || task.priority === 'HIGH'
+                                  ? 'text-red-500 bg-red-500/10'
+                                  : 'text-muted-foreground bg-muted'
+                              }`}>
+                                {task.priority}
+                              </span>
                             )}
                           </div>
                         </div>
@@ -818,11 +940,12 @@ export default function AdminProjectDetailPage() {
                           >
                             <option value="TODO">To Do</option>
                             <option value="IN_PROGRESS">In Progress</option>
-                            <option value="IN_REVIEW">In Review</option>
-                            <option value="CHANGES_REQUESTED">Changes Req.</option>
+                            <option value="READY_FOR_REVIEW">In Review</option>
+                            <option value="REVISION">Revision Required</option>
                             <option value="APPROVED">Approved</option>
                             <option value="COMPLETED">Completed</option>
                             <option value="BLOCKED">Blocked</option>
+                            <option value="CANCELLED">Cancelled</option>
                           </select>
                         </div>
                       </div>

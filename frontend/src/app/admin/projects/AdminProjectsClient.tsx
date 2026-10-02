@@ -21,6 +21,7 @@ import {
   X,
 } from 'lucide-react';
 import { ProjectStatus, Priority } from '@/types';
+import { useRealTimeEvent } from '@/context/RealTimeContext';
 
 interface IProject {
   _id: string;
@@ -148,6 +149,30 @@ export default function AdminProjectsClient({
   useEffect(() => {
     fetchProjects();
   }, [statusFilter, channelFilter]);
+
+  // Real-time synchronization
+  useRealTimeEvent('PROJECT_CREATED', (newProj) => {
+    if (!newProj) return;
+    setProjects((prev) => {
+      const exists = prev.some((p) => p._id === newProj._id);
+      if (exists) return prev.map((p) => (p._id === newProj._id ? { ...p, ...newProj } : p));
+      return [newProj, ...prev];
+    });
+  });
+
+  useRealTimeEvent('PROJECT_UPDATED', (updatedProj) => {
+    if (!updatedProj) return;
+    setProjects((prev) =>
+      prev.map((p) => (p._id === updatedProj._id ? { ...p, ...updatedProj } : p))
+    );
+  });
+
+  useRealTimeEvent('PROJECT_DELETED', (deletedProj) => {
+    const projId = deletedProj?._id || deletedProj?.id || deletedProj?.projectId;
+    if (projId) {
+      setProjects((prev) => prev.filter((p) => p._id !== projId));
+    }
+  });
 
   const handleChannelChangeInModal = async (channelId: string) => {
     setForm({ ...form, channelId, seriesId: '' });

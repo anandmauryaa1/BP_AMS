@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { TaskStatus, Priority, TaskType } from '@/types';
 import { formatDate } from '@/lib/utils';
+import { useRealTimeEvent } from '@/context/RealTimeContext';
 
 export default function AdminTasksClient({ initialTasks = [], initialProjects = [], initialEmployees = [] }: { initialTasks?: any[]; initialProjects?: any[]; initialEmployees?: any[] }) {
   const [tasks, setTasks] = useState<any[]>(initialTasks);
@@ -105,6 +106,55 @@ export default function AdminTasksClient({ initialTasks = [], initialProjects = 
   useEffect(() => {
     fetchTasks();
   }, [statusFilter, assigneeFilter, projectFilter]);
+
+  // Real-time synchronization
+  useRealTimeEvent('TASK_CREATED', (newTask) => {
+    if (!newTask) return;
+    setTasks((prev) => {
+      const exists = prev.some((t) => t._id === newTask._id);
+      if (exists) return prev.map((t) => (t._id === newTask._id ? { ...t, ...newTask } : t));
+      return [newTask, ...prev];
+    });
+  });
+
+  useRealTimeEvent('TASK_UPDATED', (updatedTask) => {
+    if (!updatedTask) return;
+    setTasks((prev) =>
+      prev.map((t) => (t._id === updatedTask._id ? { ...t, ...updatedTask } : t))
+    );
+  });
+
+  useRealTimeEvent('TASK_ASSIGNED', (assignedTask) => {
+    if (!assignedTask) return;
+    setTasks((prev) =>
+      prev.map((t) => (t._id === assignedTask._id ? { ...t, ...assignedTask } : t))
+    );
+  });
+
+  useRealTimeEvent('TASK_DELETED', (deletedTask) => {
+    const taskId = deletedTask?._id || deletedTask?.taskId;
+    if (taskId) {
+      setTasks((prev) => prev.filter((t) => t._id !== taskId));
+    }
+  });
+
+  useRealTimeEvent('PROJECT_CREATED', () => {
+    fetchMeta();
+  });
+
+  useRealTimeEvent('PROJECT_UPDATED', (updatedProj) => {
+    if (!updatedProj) return;
+    setProjects((prev) =>
+      prev.map((p) => (p._id === updatedProj._id ? { ...p, ...updatedProj } : p))
+    );
+  });
+
+  useRealTimeEvent('PROJECT_DELETED', (deletedProj) => {
+    const projId = deletedProj?._id || deletedProj?.id || deletedProj?.projectId;
+    if (projId) {
+      setProjects((prev) => prev.filter((p) => p._id !== projId));
+    }
+  });
 
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();

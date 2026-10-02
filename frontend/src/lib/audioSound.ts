@@ -25,6 +25,55 @@ class AudioSoundService {
   }
 
   /**
+   * Play Task Assignment Alert Sound (Vibrant 3-tone attention chime: F5 -> A5 -> C6 -> F6)
+   * Designed specifically to alert employees when a new task is assigned.
+   */
+  public playTaskAlertSound() {
+    try {
+      const ctx = this.getContext();
+      if (!ctx) return;
+
+      const now = ctx.currentTime;
+      // High pleasant attention arpeggio: 698.46Hz (F5), 880Hz (A5), 1046.5Hz (C6), 1396.91Hz (F6)
+      const freqs = [698.46, 880, 1046.5, 1396.91];
+      const durations = [0.12, 0.12, 0.15, 0.45];
+
+      let elapsed = 0;
+      freqs.forEach((freq, idx) => {
+        const startTime = now + elapsed;
+        const duration = durations[idx];
+        elapsed += 0.09;
+
+        // Primary Sine Oscillator
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, startTime);
+        gain.gain.setValueAtTime(0.3, startTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(startTime);
+        osc.stop(startTime + duration);
+
+        // Harmonic shimmer overtone
+        const overtone = ctx.createOscillator();
+        const overGain = ctx.createGain();
+        overtone.type = 'triangle';
+        overtone.frequency.setValueAtTime(freq * 1.5, startTime);
+        overGain.gain.setValueAtTime(0.1, startTime);
+        overGain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration * 0.8);
+        overtone.connect(overGain);
+        overGain.connect(ctx.destination);
+        overtone.start(startTime);
+        overtone.stop(startTime + duration * 0.8);
+      });
+    } catch (e) {
+      console.warn('Could not play task alert sound:', e);
+    }
+  }
+
+  /**
    * Play general notification sound (Soft double chime: A5 -> A6)
    */
   public playNotificationSound() {

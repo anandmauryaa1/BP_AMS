@@ -17,21 +17,41 @@ self.addEventListener('push', function (event) {
   try {
     const payload = event.data.json();
     const title = payload.title || 'blindarea Production';
+    const isTaskAlert = payload.tag === 'TASK_ASSIGNED' || payload.tag === 'TASK_DUE';
     const options = {
       body: payload.body || 'You have a new studio update.',
       icon: payload.icon || '/favicon.ico',
       badge: payload.badge || '/favicon.ico',
       tag: payload.tag || 'bp-ams-notification',
-      vibrate: [150, 50, 100],
+      vibrate: isTaskAlert ? [200, 100, 200, 100, 400] : [150, 50, 100],
       data: {
-        url: payload.url || '/dashboard',
+        url: payload.url || '/tasks',
         timestamp: payload.timestamp || Date.now(),
+        type: payload.tag || 'TASK_ASSIGNED',
         ...payload.data,
       },
-      requireInteraction: false,
+      requireInteraction: isTaskAlert,
     };
 
-    event.waitUntil(self.registration.showNotification(title, options));
+    event.waitUntil(
+      Promise.all([
+        self.registration.showNotification(title, options),
+        self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clients) {
+          clients.forEach(function (client) {
+            client.postMessage({
+              type: 'PUSH_NOTIFICATION_RECEIVED',
+              payload: {
+                title: title,
+                body: options.body,
+                tag: payload.tag,
+                url: options.data.url,
+                timestamp: options.data.timestamp,
+              },
+            });
+          });
+        }),
+      ])
+    );
   } catch (err) {
     console.error('[ServiceWorker] Push event parsing error:', err);
     event.waitUntil(

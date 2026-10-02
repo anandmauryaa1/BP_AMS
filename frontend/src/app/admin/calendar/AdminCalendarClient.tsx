@@ -33,6 +33,7 @@ import {
   Copy,
   Check,
 } from 'lucide-react';
+import { useRealTimeEvent } from '@/context/RealTimeContext';
 
 export default function AdminCalendarClient({ initialDeliverables = [], initialChannels = [], initialProjects = [], initialEmployees = [] }: { initialDeliverables?: any[]; initialChannels?: any[]; initialProjects?: any[]; initialEmployees?: any[] }) {
   const [deliverables, setDeliverables] = useState<any[]>(initialDeliverables);
@@ -171,6 +172,51 @@ export default function AdminCalendarClient({ initialDeliverables = [], initialC
   useEffect(() => {
     fetchCalendarData();
   }, []);
+
+  // Real-time synchronization
+  useRealTimeEvent('DELIVERABLE_CREATED', (newDeliv) => {
+    if (!newDeliv) return;
+    setDeliverables((prev) => {
+      const exists = prev.some((d) => d._id === newDeliv._id);
+      if (exists) return prev.map((d) => (d._id === newDeliv._id ? { ...d, ...newDeliv } : d));
+      return [...prev, newDeliv];
+    });
+  });
+
+  useRealTimeEvent('DELIVERABLE_UPDATED', (updatedDeliv) => {
+    if (!updatedDeliv) return;
+    setDeliverables((prev) =>
+      prev.map((d) => (d._id === updatedDeliv._id ? { ...d, ...updatedDeliv } : d))
+    );
+    if (activeDeliverable && activeDeliverable._id === updatedDeliv._id) {
+      setActiveDeliverable((prev: any) => ({ ...prev, ...updatedDeliv }));
+    }
+  });
+
+  useRealTimeEvent('DELIVERABLE_DELETED', (deletedDeliv) => {
+    const delivId = deletedDeliv?._id || deletedDeliv?.deliverableId;
+    if (delivId) {
+      setDeliverables((prev) => prev.filter((d) => d._id !== delivId));
+    }
+  });
+
+  useRealTimeEvent('PROJECT_CREATED', () => {
+    fetchCalendarData();
+  });
+
+  useRealTimeEvent('PROJECT_UPDATED', (updatedProj) => {
+    if (!updatedProj) return;
+    setProjects((prev) =>
+      prev.map((p) => (p._id === updatedProj._id ? { ...p, ...updatedProj } : p))
+    );
+  });
+
+  useRealTimeEvent('PROJECT_DELETED', (deletedProj) => {
+    const projId = deletedProj?._id || deletedProj?.id || deletedProj?.projectId;
+    if (projId) {
+      setProjects((prev) => prev.filter((p) => p._id !== projId));
+    }
+  });
 
   // Helper for Local Date YYYY-MM-DD
   const formatLocalDate = (d: Date) => {
