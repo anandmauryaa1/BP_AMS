@@ -22,6 +22,14 @@ import {
   Layers,
   ChevronDown,
   X,
+  ExternalLink,
+  HardDrive,
+  Globe,
+  Link as LinkIcon,
+  Edit3,
+  Copy,
+  Check,
+  FileCode,
 } from 'lucide-react';
 import {
   ProjectStatus,
@@ -46,6 +54,10 @@ export default function AdminProjectDetailPage() {
 
   // Modals
   const [isDeliverableModalOpen, setIsDeliverableModalOpen] = useState(false);
+  const [isEditDeliverableModalOpen, setIsEditDeliverableModalOpen] = useState(false);
+  const [editingDeliverable, setEditingDeliverable] = useState<any>(null);
+  const [copiedLink, setCopiedLink] = useState<string | null>(null);
+
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +65,14 @@ export default function AdminProjectDetailPage() {
   const getAuthHeaders = (): Record<string, string> => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
     return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
+  const copyToClipboard = (text: string, id: string) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      setCopiedLink(id);
+      setTimeout(() => setCopiedLink(null), 2000);
+    }
   };
 
   // Deliverable form
@@ -63,6 +83,27 @@ export default function AdminProjectDetailPage() {
     aspectRatio: '16:9',
     scheduledReleaseDate: '',
     targetDurationSeconds: '',
+    driveLink: '',
+    docLink: '',
+    outputUrl: '',
+    publishedUrl: '',
+    outputNotes: '',
+    caption: '',
+  });
+
+  // Edit Deliverable form
+  const [editDeliverableForm, setEditDeliverableForm] = useState({
+    title: '',
+    platform: 'YOUTUBE',
+    format: 'FULL_VIDEO',
+    status: 'PLANNED',
+    scheduledAt: '',
+    driveLink: '',
+    docLink: '',
+    outputUrl: '',
+    publishedUrl: '',
+    outputNotes: '',
+    caption: '',
   });
 
   // Task form
@@ -146,6 +187,83 @@ export default function AdminProjectDetailPage() {
     }
   };
 
+  const openEditDeliverableModal = (deliv: any) => {
+    setEditingDeliverable(deliv);
+    setEditDeliverableForm({
+      title: deliv.title || '',
+      platform: deliv.platform || 'YOUTUBE',
+      format: deliv.format || 'FULL_VIDEO',
+      status: deliv.status || 'PLANNED',
+      scheduledAt: deliv.scheduledAt ? new Date(deliv.scheduledAt).toISOString().split('T')[0] : '',
+      driveLink: deliv.driveLink || '',
+      docLink: deliv.docLink || '',
+      outputUrl: deliv.outputUrl || '',
+      publishedUrl: deliv.publishedUrl || '',
+      outputNotes: deliv.outputNotes || '',
+      caption: deliv.caption || '',
+    });
+    setError(null);
+    setIsEditDeliverableModalOpen(true);
+  };
+
+  const handleUpdateDeliverable = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingDeliverable) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const payload: any = {
+        title: editDeliverableForm.title,
+        platform: editDeliverableForm.platform,
+        format: editDeliverableForm.format,
+        status: editDeliverableForm.status,
+        scheduledAt: editDeliverableForm.scheduledAt ? new Date(editDeliverableForm.scheduledAt) : undefined,
+        driveLink: editDeliverableForm.driveLink.trim() || undefined,
+        docLink: editDeliverableForm.docLink.trim() || undefined,
+        outputUrl: editDeliverableForm.outputUrl.trim() || undefined,
+        publishedUrl: editDeliverableForm.publishedUrl.trim() || undefined,
+        outputNotes: editDeliverableForm.outputNotes.trim() || undefined,
+        caption: editDeliverableForm.caption.trim() || undefined,
+      };
+
+      const res = await fetch(`/api/deliverables/${editingDeliverable._id}`, {
+        method: 'PATCH',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || data.error || 'Failed to update deliverable');
+
+      setIsEditDeliverableModalOpen(false);
+      setEditingDeliverable(null);
+      await fetchProjectData();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUpdateDeliverableStatus = async (delivId: string, status: string) => {
+    try {
+      const res = await fetch(`/api/deliverables/${delivId}`, {
+        method: 'PATCH',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ status }),
+      });
+      if (res.ok) {
+        setDeliverables((prev) =>
+          prev.map((d) => (d._id === delivId ? { ...d, status } : d))
+        );
+      }
+    } catch (err) {
+      console.error('Failed to update deliverable status:', err);
+    }
+  };
+
   const handleCreateDeliverable = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -163,6 +281,12 @@ export default function AdminProjectDetailPage() {
         scheduledReleaseDate: deliverableForm.scheduledReleaseDate
           ? new Date(deliverableForm.scheduledReleaseDate)
           : undefined,
+        driveLink: deliverableForm.driveLink.trim() || undefined,
+        docLink: deliverableForm.docLink.trim() || undefined,
+        outputUrl: deliverableForm.outputUrl.trim() || undefined,
+        publishedUrl: deliverableForm.publishedUrl.trim() || undefined,
+        outputNotes: deliverableForm.outputNotes.trim() || undefined,
+        caption: deliverableForm.caption.trim() || undefined,
       };
 
       const res = await fetch('/api/deliverables', {
@@ -182,6 +306,12 @@ export default function AdminProjectDetailPage() {
         aspectRatio: '16:9',
         scheduledReleaseDate: '',
         targetDurationSeconds: '',
+        driveLink: '',
+        docLink: '',
+        outputUrl: '',
+        publishedUrl: '',
+        outputNotes: '',
+        caption: '',
       });
       setIsDeliverableModalOpen(false);
       await fetchProjectData();
@@ -410,41 +540,217 @@ export default function AdminProjectDetailPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {deliverables.map((deliv) => (
-                  <div
-                    key={deliv._id}
-                    className="p-4 rounded-xl bg-card border border-border space-y-2 shadow-sm"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <h4 className="font-semibold text-foreground text-sm">{deliv.title}</h4>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                          <span className="px-1.5 py-0.5 rounded bg-muted text-foreground text-[10px] font-mono border border-border">
-                            {deliv.platform}
-                          </span>
-                          <span className="text-muted-foreground">•</span>
-                          <span>{deliv.aspectRatio}</span>
-                          {deliv.targetDurationSeconds && (
-                            <>
-                              <span className="text-muted-foreground">•</span>
-                              <span>{Math.round(deliv.targetDurationSeconds / 60)}m</span>
-                            </>
-                          )}
+                {deliverables.map((deliv) => {
+                  const hasAnyLink = deliv.driveLink || deliv.docLink || deliv.outputUrl || deliv.publishedUrl;
+                  return (
+                    <div
+                      key={deliv._id}
+                      className="p-4 rounded-xl bg-card border border-border space-y-3 shadow-sm hover:border-border/80 transition"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
+                              {deliv.deliverableId || 'DEL'}
+                            </span>
+                            <h4 className="font-semibold text-foreground text-sm">{deliv.title}</h4>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span className="px-1.5 py-0.5 rounded bg-muted text-foreground text-[10px] font-mono border border-border">
+                              {deliv.platform}
+                            </span>
+                            <span className="text-muted-foreground">•</span>
+                            <span className="text-[11px] font-medium">{deliv.format?.replace(/_/g, ' ') || deliv.aspectRatio}</span>
+                            {deliv.targetDurationSeconds && (
+                              <>
+                                <span className="text-muted-foreground">•</span>
+                                <span>{Math.round(deliv.targetDurationSeconds / 60)}m</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            onClick={() => openEditDeliverableModal(deliv)}
+                            title="Edit Deliverable & Output Links"
+                            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition text-xs flex items-center gap-1 border border-border"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                            <span className="text-[11px] font-medium hidden sm:inline">Links & Details</span>
+                          </button>
+                          <select
+                            value={deliv.status}
+                            onChange={(e) => handleUpdateDeliverableStatus(deliv._id, e.target.value)}
+                            className="px-2 py-1 rounded-lg bg-background border border-border text-[11px] font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-red-500"
+                          >
+                            <option value="PLANNED">Planned</option>
+                            <option value="IN_PRODUCTION">In Production</option>
+                            <option value="READY_FOR_REVIEW">Ready Review</option>
+                            <option value="APPROVED">Approved</option>
+                            <option value="SCHEDULED">Scheduled</option>
+                            <option value="PUBLISHED">Published</option>
+                            <option value="REVISION">Revision</option>
+                            <option value="CANCELLED">Cancelled</option>
+                          </select>
                         </div>
                       </div>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-muted text-foreground border border-border">
-                        {deliv.status}
-                      </span>
-                    </div>
 
-                    {deliv.scheduledReleaseDate && (
-                      <div className="text-[11px] text-muted-foreground flex items-center gap-1">
-                        <Calendar className="w-3 h-3" />
-                        Release: {formatDate(deliv.scheduledReleaseDate)}
+                      {/* Deliverable Output Links Section */}
+                      <div className="pt-2 border-t border-border/60 space-y-2">
+                        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+                          <span>Output & Asset Links</span>
+                          {!hasAnyLink && (
+                            <button
+                              onClick={() => openEditDeliverableModal(deliv)}
+                              className="text-red-500 hover:underline normal-case text-[11px] font-medium"
+                            >
+                              + Add Link
+                            </button>
+                          )}
+                        </div>
+
+                        {hasAnyLink ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {/* Google Drive Link */}
+                            {deliv.driveLink && (
+                              <div className="inline-flex items-center rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs px-2.5 py-1 gap-1.5 shadow-sm">
+                                <HardDrive className="w-3.5 h-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                                <span className="font-semibold text-[11px]">Google Drive</span>
+                                <a
+                                  href={deliv.driveLink}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="hover:underline flex items-center gap-0.5 ml-1 text-emerald-800 dark:text-emerald-200 font-bold"
+                                  title={deliv.driveLink}
+                                >
+                                  Open <ExternalLink className="w-3 h-3" />
+                                </a>
+                                <button
+                                  type="button"
+                                  onClick={() => copyToClipboard(deliv.driveLink, `${deliv._id}-drive`)}
+                                  className="ml-1 p-0.5 hover:bg-emerald-200/50 dark:hover:bg-emerald-800/50 rounded"
+                                  title="Copy Drive URL"
+                                >
+                                  {copiedLink === `${deliv._id}-drive` ? (
+                                    <Check className="w-3 h-3 text-emerald-600" />
+                                  ) : (
+                                    <Copy className="w-3 h-3 text-emerald-600/70" />
+                                  )}
+                                </button>
+                              </div>
+                            )}
+
+                            {/* Google Doc / Script Link */}
+                            {deliv.docLink && (
+                              <div className="inline-flex items-center rounded-lg bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs px-2.5 py-1 gap-1.5 shadow-sm">
+                                <FileText className="w-3.5 h-3.5 shrink-0 text-blue-600 dark:text-blue-400" />
+                                <span className="font-semibold text-[11px]">Doc / Script</span>
+                                <a
+                                  href={deliv.docLink}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="hover:underline flex items-center gap-0.5 ml-1 text-blue-800 dark:text-blue-200 font-bold"
+                                  title={deliv.docLink}
+                                >
+                                  Open <ExternalLink className="w-3 h-3" />
+                                </a>
+                                <button
+                                  type="button"
+                                  onClick={() => copyToClipboard(deliv.docLink, `${deliv._id}-doc`)}
+                                  className="ml-1 p-0.5 hover:bg-blue-200/50 dark:hover:bg-blue-800/50 rounded"
+                                  title="Copy Doc URL"
+                                >
+                                  {copiedLink === `${deliv._id}-doc` ? (
+                                    <Check className="w-3 h-3 text-blue-600" />
+                                  ) : (
+                                    <Copy className="w-3 h-3 text-blue-600/70" />
+                                  )}
+                                </button>
+                              </div>
+                            )}
+
+                            {/* Output Asset / Master URL */}
+                            {deliv.outputUrl && (
+                              <div className="inline-flex items-center rounded-lg bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 text-xs px-2.5 py-1 gap-1.5 shadow-sm">
+                                <LinkIcon className="w-3.5 h-3.5 shrink-0 text-purple-600 dark:text-purple-400" />
+                                <span className="font-semibold text-[11px]">Output File</span>
+                                <a
+                                  href={deliv.outputUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="hover:underline flex items-center gap-0.5 ml-1 text-purple-800 dark:text-purple-200 font-bold"
+                                  title={deliv.outputUrl}
+                                >
+                                  Open <ExternalLink className="w-3 h-3" />
+                                </a>
+                                <button
+                                  type="button"
+                                  onClick={() => copyToClipboard(deliv.outputUrl, `${deliv._id}-out`)}
+                                  className="ml-1 p-0.5 hover:bg-purple-200/50 dark:hover:bg-purple-800/50 rounded"
+                                  title="Copy Output URL"
+                                >
+                                  {copiedLink === `${deliv._id}-out` ? (
+                                    <Check className="w-3 h-3 text-purple-600" />
+                                  ) : (
+                                    <Copy className="w-3 h-3 text-purple-600/70" />
+                                  )}
+                                </button>
+                              </div>
+                            )}
+
+                            {/* Published Video Link */}
+                            {deliv.publishedUrl && (
+                              <div className="inline-flex items-center rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 text-xs px-2.5 py-1 gap-1.5 shadow-sm">
+                                <Globe className="w-3.5 h-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                                <span className="font-semibold text-[11px]">Live Link</span>
+                                <a
+                                  href={deliv.publishedUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="hover:underline flex items-center gap-0.5 ml-1 text-amber-800 dark:text-amber-200 font-bold"
+                                  title={deliv.publishedUrl}
+                                >
+                                  Open <ExternalLink className="w-3 h-3" />
+                                </a>
+                                <button
+                                  type="button"
+                                  onClick={() => copyToClipboard(deliv.publishedUrl, `${deliv._id}-pub`)}
+                                  className="ml-1 p-0.5 hover:bg-amber-200/50 dark:hover:bg-amber-800/50 rounded"
+                                  title="Copy Live URL"
+                                >
+                                  {copiedLink === `${deliv._id}-pub` ? (
+                                    <Check className="w-3 h-3 text-amber-600" />
+                                  ) : (
+                                    <Copy className="w-3 h-3 text-amber-600/70" />
+                                  )}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-[11px] text-muted-foreground italic bg-muted/30 px-2.5 py-1.5 rounded-lg border border-border/50">
+                            No Drive / Doc / Output links attached yet.
+                          </div>
+                        )}
+
+                        {deliv.outputNotes && (
+                          <div className="text-[11px] text-foreground/80 bg-muted/40 p-2 rounded-lg border border-border/50">
+                            <span className="font-semibold text-muted-foreground uppercase text-[9px] block">Notes / Revisions:</span>
+                            {deliv.outputNotes}
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                ))}
+
+                      {(deliv.scheduledReleaseDate || deliv.scheduledAt) && (
+                        <div className="text-[11px] text-muted-foreground flex items-center gap-1 pt-1">
+                          <Calendar className="w-3 h-3" />
+                          Release: {formatDate(deliv.scheduledReleaseDate || deliv.scheduledAt)}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -472,52 +778,91 @@ export default function AdminProjectDetailPage() {
                 <p className="text-xs text-muted-foreground mt-1">Break down work into Editing, Thumbnail, Script, etc.</p>
               </div>
             ) : (
-              <div className="space-y-2">
-                {tasks.map((task) => (
-                  <div
-                    key={task._id}
-                    className="p-4 rounded-xl bg-card border border-border hover:border-border/80 transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm"
-                  >
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-foreground">{task.title}</span>
-                        <span className="px-1.5 py-0.5 rounded bg-muted text-[10px] text-foreground font-mono border border-border">
-                          {task.type?.replace(/_/g, ' ') || task.taskType?.replace(/_/g, ' ')}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                        {task.assigneeId || task.assignedTo ? (
-                          <span className="text-foreground font-medium">👤 {task.assigneeId?.name || task.assignedTo?.name || 'Assigned'}</span>
-                        ) : (
-                          <span className="text-muted-foreground">Unassigned</span>
-                        )}
-                        {(task.estimatedMinutes || task.estimatedHours) && (
-                          <span>⏱️ {task.estimatedMinutes ? `${task.estimatedMinutes}m` : `${task.estimatedHours}h`}</span>
-                        )}
-                        {task.priority === 'URGENT' && (
-                          <span className="text-red-500 font-bold">URGENT</span>
-                        )}
-                      </div>
-                    </div>
+              <div className="space-y-3">
+                {tasks.map((task) => {
+                  const hasTaskOutput = task.outputUrl || task.driveLink || task.docLink;
+                  return (
+                    <div
+                      key={task._id}
+                      className="p-4 rounded-xl bg-card border border-border hover:border-border/80 transition space-y-2.5 shadow-sm"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-foreground">{task.title}</span>
+                            <span className="px-1.5 py-0.5 rounded bg-muted text-[10px] text-foreground font-mono border border-border">
+                              {task.type?.replace(/_/g, ' ') || task.taskType?.replace(/_/g, ' ')}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                            {task.assigneeId || task.assignedTo ? (
+                              <span className="text-foreground font-medium">👤 {task.assigneeId?.name || task.assignedTo?.name || 'Assigned'}</span>
+                            ) : (
+                              <span className="text-muted-foreground">Unassigned</span>
+                            )}
+                            {(task.estimatedMinutes || task.estimatedHours) && (
+                              <span>⏱️ {task.estimatedMinutes ? `${task.estimatedMinutes}m` : `${task.estimatedHours}h`}</span>
+                            )}
+                            {task.priority === 'URGENT' && (
+                              <span className="text-red-500 font-bold">URGENT</span>
+                            )}
+                          </div>
+                        </div>
 
-                    {/* Task Status Dropdown */}
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={task.status}
-                        onChange={(e) => handleUpdateTaskStatus(task._id, e.target.value)}
-                        className="px-2.5 py-1 rounded-lg bg-background border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-red-500"
-                      >
-                        <option value="TODO">To Do</option>
-                        <option value="IN_PROGRESS">In Progress</option>
-                        <option value="IN_REVIEW">In Review</option>
-                        <option value="CHANGES_REQUESTED">Changes Req.</option>
-                        <option value="APPROVED">Approved</option>
-                        <option value="COMPLETED">Completed</option>
-                        <option value="BLOCKED">Blocked</option>
-                      </select>
+                        {/* Task Status Dropdown */}
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={task.status}
+                            onChange={(e) => handleUpdateTaskStatus(task._id, e.target.value)}
+                            className="px-2.5 py-1 rounded-lg bg-background border border-border text-xs font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-red-500"
+                          >
+                            <option value="TODO">To Do</option>
+                            <option value="IN_PROGRESS">In Progress</option>
+                            <option value="IN_REVIEW">In Review</option>
+                            <option value="CHANGES_REQUESTED">Changes Req.</option>
+                            <option value="APPROVED">Approved</option>
+                            <option value="COMPLETED">Completed</option>
+                            <option value="BLOCKED">Blocked</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Task Deliverable / Output URL Attachment */}
+                      {hasTaskOutput && (
+                        <div className="pt-2 border-t border-border/50 flex flex-wrap items-center gap-2 text-xs">
+                          <span className="text-[10px] uppercase font-bold text-muted-foreground">Task Output:</span>
+                          {(task.outputUrl || task.driveLink) && (
+                            <a
+                              href={task.outputUrl || task.driveLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-semibold hover:underline"
+                            >
+                              <HardDrive className="w-3 h-3" />
+                              View Output Link <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
+                          )}
+                          {task.docLink && (
+                            <a
+                              href={task.docLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-xs font-semibold hover:underline"
+                            >
+                              <FileText className="w-3 h-3" />
+                              Doc / Script <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
+                          )}
+                          {task.notes && (
+                            <span className="text-muted-foreground text-[11px] italic">
+                              "{task.notes}"
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -526,7 +871,7 @@ export default function AdminProjectDetailPage() {
         {/* Add Deliverable Modal */}
         {isDeliverableModalOpen && (
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-card border border-border rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl">
+            <div className="bg-card border border-border rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
                   <Share2 className="w-5 h-5 text-red-500" />
@@ -550,7 +895,7 @@ export default function AdminProjectDetailPage() {
               <form onSubmit={handleCreateDeliverable} className="space-y-4">
                 <div>
                   <label className="block text-xs font-semibold text-foreground uppercase mb-1">
-                    Deliverable Title
+                    Deliverable Title *
                   </label>
                   <input
                     type="text"
@@ -643,6 +988,79 @@ export default function AdminProjectDetailPage() {
                   />
                 </div>
 
+                {/* Output Links Section in Add Modal */}
+                <div className="pt-2 border-t border-border space-y-3">
+                  <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <LinkIcon className="w-3.5 h-3.5 text-red-500" />
+                    Asset & Deliverable Links
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-foreground mb-1">
+                      📂 Google Drive Link
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://drive.google.com/drive/folders/..."
+                      value={deliverableForm.driveLink}
+                      onChange={(e) => setDeliverableForm({ ...deliverableForm, driveLink: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-red-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-foreground mb-1">
+                      📄 Google Doc / Script Link
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://docs.google.com/document/d/..."
+                      value={deliverableForm.docLink}
+                      onChange={(e) => setDeliverableForm({ ...deliverableForm, docLink: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-red-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-foreground mb-1">
+                      🔗 Output Master / Asset URL (Dropbox, Frame.io, S3)
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://..."
+                      value={deliverableForm.outputUrl}
+                      onChange={(e) => setDeliverableForm({ ...deliverableForm, outputUrl: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-red-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-foreground mb-1">
+                      🌐 Live Published Video URL
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://youtube.com/watch?v=..."
+                      value={deliverableForm.publishedUrl}
+                      onChange={(e) => setDeliverableForm({ ...deliverableForm, publishedUrl: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-red-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-foreground mb-1">
+                      📝 Output Notes / Editorial Instructions
+                    </label>
+                    <textarea
+                      rows={2}
+                      placeholder="Specific instructions, cut notes, or review remarks..."
+                      value={deliverableForm.outputNotes}
+                      onChange={(e) => setDeliverableForm({ ...deliverableForm, outputNotes: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"
+                    />
+                  </div>
+                </div>
+
                 <div className="flex justify-end gap-2 pt-2">
                   <button
                     type="button"
@@ -657,6 +1075,197 @@ export default function AdminProjectDetailPage() {
                     className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-sm font-medium transition shadow-sm"
                   >
                     {saving ? 'Adding...' : 'Add Deliverable'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Deliverable Modal */}
+        {isEditDeliverableModalOpen && editingDeliverable && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-card border border-border rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border uppercase">
+                    {editingDeliverable.deliverableId || 'DEL'}
+                  </span>
+                  <h3 className="text-lg font-bold text-foreground flex items-center gap-2 mt-1">
+                    <Edit3 className="w-5 h-5 text-red-500" />
+                    Edit Deliverable & Links
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setIsEditDeliverableModalOpen(false)}
+                  className="text-muted-foreground hover:text-foreground text-sm font-semibold"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {error && (
+                <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs flex items-center gap-2 font-medium">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleUpdateDeliverable} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-foreground uppercase mb-1">
+                    Deliverable Title
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editDeliverableForm.title}
+                    onChange={(e) => setEditDeliverableForm({ ...editDeliverableForm, title: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-foreground uppercase mb-1">
+                      Status
+                    </label>
+                    <select
+                      value={editDeliverableForm.status}
+                      onChange={(e) => setEditDeliverableForm({ ...editDeliverableForm, status: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-red-500"
+                    >
+                      <option value="PLANNED">Planned</option>
+                      <option value="IN_PRODUCTION">In Production</option>
+                      <option value="READY_FOR_REVIEW">Ready for Review</option>
+                      <option value="APPROVED">Approved</option>
+                      <option value="SCHEDULED">Scheduled</option>
+                      <option value="PUBLISHED">Published</option>
+                      <option value="REVISION">Revision Required</option>
+                      <option value="CANCELLED">Cancelled</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-foreground uppercase mb-1">
+                      Scheduled Date
+                    </label>
+                    <input
+                      type="date"
+                      value={editDeliverableForm.scheduledAt}
+                      onChange={(e) => setEditDeliverableForm({ ...editDeliverableForm, scheduledAt: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-red-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Output Links Section in Edit Modal */}
+                <div className="pt-2 border-t border-border space-y-3">
+                  <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                    <LinkIcon className="w-3.5 h-3.5 text-red-500" />
+                    Deliverable Output & Media Links
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-foreground mb-1 flex items-center justify-between">
+                      <span className="flex items-center gap-1"><HardDrive className="w-3 h-3 text-emerald-500" /> Google Drive Link</span>
+                      {editDeliverableForm.driveLink && (
+                        <a href={editDeliverableForm.driveLink} target="_blank" rel="noopener noreferrer" className="text-emerald-600 hover:underline flex items-center gap-0.5 text-[10px]">
+                          Open Link <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      )}
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://drive.google.com/drive/folders/..."
+                      value={editDeliverableForm.driveLink}
+                      onChange={(e) => setEditDeliverableForm({ ...editDeliverableForm, driveLink: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-red-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-foreground mb-1 flex items-center justify-between">
+                      <span className="flex items-center gap-1"><FileText className="w-3 h-3 text-blue-500" /> Google Doc / Script Link</span>
+                      {editDeliverableForm.docLink && (
+                        <a href={editDeliverableForm.docLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline flex items-center gap-0.5 text-[10px]">
+                          Open Link <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      )}
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://docs.google.com/document/d/..."
+                      value={editDeliverableForm.docLink}
+                      onChange={(e) => setEditDeliverableForm({ ...editDeliverableForm, docLink: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-red-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-foreground mb-1 flex items-center justify-between">
+                      <span className="flex items-center gap-1"><LinkIcon className="w-3 h-3 text-purple-500" /> Master Asset / Output URL</span>
+                      {editDeliverableForm.outputUrl && (
+                        <a href={editDeliverableForm.outputUrl} target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:underline flex items-center gap-0.5 text-[10px]">
+                          Open Link <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      )}
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://..."
+                      value={editDeliverableForm.outputUrl}
+                      onChange={(e) => setEditDeliverableForm({ ...editDeliverableForm, outputUrl: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-red-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-foreground mb-1 flex items-center justify-between">
+                      <span className="flex items-center gap-1"><Globe className="w-3 h-3 text-amber-500" /> Published Video URL</span>
+                      {editDeliverableForm.publishedUrl && (
+                        <a href={editDeliverableForm.publishedUrl} target="_blank" rel="noopener noreferrer" className="text-amber-600 hover:underline flex items-center gap-0.5 text-[10px]">
+                          Open Link <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      )}
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://youtube.com/watch?v=..."
+                      value={editDeliverableForm.publishedUrl}
+                      onChange={(e) => setEditDeliverableForm({ ...editDeliverableForm, publishedUrl: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-red-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-foreground mb-1">
+                      📝 Output Notes / Review Remarks
+                    </label>
+                    <textarea
+                      rows={2}
+                      placeholder="Add review feedback, revision notes, or output details..."
+                      value={editDeliverableForm.outputNotes}
+                      onChange={(e) => setEditDeliverableForm({ ...editDeliverableForm, outputNotes: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg bg-background border border-border text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditDeliverableModalOpen(false)}
+                    className="px-4 py-2 rounded-lg bg-muted hover:bg-muted/80 text-foreground text-sm font-medium transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white text-sm font-medium transition shadow-sm"
+                  >
+                    {saving ? 'Saving Changes...' : 'Save Deliverable'}
                   </button>
                 </div>
               </form>

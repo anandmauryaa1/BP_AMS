@@ -26,6 +26,12 @@ import {
   Tag,
   X,
   Edit3,
+  HardDrive,
+  FileText,
+  Globe,
+  Link as LinkIcon,
+  Copy,
+  Check,
 } from 'lucide-react';
 
 export default function AdminCalendarClient({ initialDeliverables = [], initialChannels = [], initialProjects = [], initialEmployees = [] }: { initialDeliverables?: any[]; initialChannels?: any[]; initialProjects?: any[]; initialEmployees?: any[] }) {
@@ -49,8 +55,69 @@ export default function AdminCalendarClient({ initialDeliverables = [], initialC
   const [selectedDayForCreate, setSelectedDayForCreate] = useState<string>('');
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [activeDeliverable, setActiveDeliverable] = useState<any>(null);
+  const [isEditingDetailLinks, setIsEditingDetailLinks] = useState(false);
+  const [detailLinksForm, setDetailLinksForm] = useState({
+    driveLink: '',
+    docLink: '',
+    outputUrl: '',
+    publishedUrl: '',
+    outputNotes: '',
+  });
+  const [copiedLink, setCopiedLink] = useState<string | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [savingLinks, setSavingLinks] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const copyToClipboard = (text: string, id: string) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      setCopiedLink(id);
+      setTimeout(() => setCopiedLink(null), 2000);
+    }
+  };
+
+  const handleOpenDetailModal = (deliv: any) => {
+    setActiveDeliverable(deliv);
+    setDetailLinksForm({
+      driveLink: deliv.driveLink || '',
+      docLink: deliv.docLink || '',
+      outputUrl: deliv.outputUrl || '',
+      publishedUrl: deliv.publishedUrl || '',
+      outputNotes: deliv.outputNotes || '',
+    });
+    setIsEditingDetailLinks(false);
+    setIsDetailModalOpen(true);
+  };
+
+  const handleSaveDetailLinks = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeDeliverable) return;
+    setSavingLinks(true);
+    try {
+      const res = await fetch(`/api/deliverables/${activeDeliverable._id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          driveLink: detailLinksForm.driveLink.trim() || undefined,
+          docLink: detailLinksForm.docLink.trim() || undefined,
+          outputUrl: detailLinksForm.outputUrl.trim() || undefined,
+          publishedUrl: detailLinksForm.publishedUrl.trim() || undefined,
+          outputNotes: detailLinksForm.outputNotes.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update deliverable links');
+
+      const updated = data.data || { ...activeDeliverable, ...detailLinksForm };
+      setActiveDeliverable(updated);
+      setIsEditingDetailLinks(false);
+      await fetchCalendarData();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setSavingLinks(false);
+    }
+  };
 
   // Form State for New Deliverable
   const [saving, setSaving] = useState(false);
@@ -63,6 +130,11 @@ export default function AdminCalendarClient({ initialDeliverables = [], initialC
     scheduledAt: '',
     status: 'SCHEDULED',
     caption: '',
+    driveLink: '',
+    docLink: '',
+    outputUrl: '',
+    publishedUrl: '',
+    outputNotes: '',
   });
 
   const fetchCalendarData = async () => {
@@ -199,6 +271,11 @@ export default function AdminCalendarClient({ initialDeliverables = [], initialC
       scheduledAt: dateStr,
       status: 'SCHEDULED',
       caption: '',
+      driveLink: '',
+      docLink: '',
+      outputUrl: '',
+      publishedUrl: '',
+      outputNotes: '',
     });
     setIsCreateModalOpen(true);
   };
@@ -223,6 +300,11 @@ export default function AdminCalendarClient({ initialDeliverables = [], initialC
         body: JSON.stringify({
           ...newForm,
           scheduledAt: newForm.scheduledAt ? new Date(newForm.scheduledAt).toISOString() : undefined,
+          driveLink: newForm.driveLink?.trim() || undefined,
+          docLink: newForm.docLink?.trim() || undefined,
+          outputUrl: newForm.outputUrl?.trim() || undefined,
+          publishedUrl: newForm.publishedUrl?.trim() || undefined,
+          outputNotes: newForm.outputNotes?.trim() || undefined,
         }),
       });
 
@@ -506,10 +588,7 @@ export default function AdminCalendarClient({ initialDeliverables = [], initialC
                     {dayDeliverables.map((deliv) => (
                       <div
                         key={deliv._id}
-                        onClick={() => {
-                          setActiveDeliverable(deliv);
-                          setIsDetailModalOpen(true);
-                        }}
+                        onClick={() => handleOpenDetailModal(deliv)}
                         className={`p-2 rounded-lg border cursor-pointer transition shadow-sm hover:scale-[1.02] ${getPlatformStyle(
                           deliv.platform
                         )}`}
@@ -685,6 +764,53 @@ export default function AdminCalendarClient({ initialDeliverables = [], initialC
                   </div>
                 </div>
 
+                {/* Output Links in Calendar Schedule Form */}
+                <div className="pt-2 border-t border-slate-200 dark:border-zinc-800 space-y-3">
+                  <div className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400 flex items-center gap-1.5">
+                    <LinkIcon className="w-3.5 h-3.5 text-red-500" />
+                    Asset & Deliverable Links (Optional)
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-zinc-400 mb-1">
+                      📂 Google Drive Link
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://drive.google.com/..."
+                      value={newForm.driveLink}
+                      onChange={(e) => setNewForm({ ...newForm, driveLink: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-white text-xs focus:outline-none focus:border-red-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-zinc-400 mb-1">
+                      📄 Google Doc / Script Link
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://docs.google.com/..."
+                      value={newForm.docLink}
+                      onChange={(e) => setNewForm({ ...newForm, docLink: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-white text-xs focus:outline-none focus:border-red-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 dark:text-zinc-400 mb-1">
+                      🔗 Output File / Video URL (Dropbox, Frame.io)
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://..."
+                      value={newForm.outputUrl}
+                      onChange={(e) => setNewForm({ ...newForm, outputUrl: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-white text-xs focus:outline-none focus:border-red-500"
+                    />
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 dark:text-zinc-400 uppercase mb-1">
                     Caption / Notes
@@ -722,7 +848,7 @@ export default function AdminCalendarClient({ initialDeliverables = [], initialC
         {/* Deliverable Details & Quick Edit Modal */}
         {isDetailModalOpen && activeDeliverable && (
           <div className="fixed inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl">
+            <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400 font-bold uppercase">
@@ -754,6 +880,206 @@ export default function AdminCalendarClient({ initialDeliverables = [], initialC
                     {getDeliverableDateStr(activeDeliverable) || 'Not Set'}
                   </div>
                 </div>
+              </div>
+
+              {/* Deliverable Output Links Showcase */}
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-zinc-300 flex items-center gap-1.5">
+                    <LinkIcon className="w-3.5 h-3.5 text-red-500" />
+                    Deliverable Output Links
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingDetailLinks(!isEditingDetailLinks)}
+                    className="text-xs text-red-600 dark:text-red-400 font-semibold hover:underline flex items-center gap-1"
+                  >
+                    <Edit3 className="w-3 h-3" />
+                    {isEditingDetailLinks ? 'Close Edit' : 'Edit Links'}
+                  </button>
+                </div>
+
+                {isEditingDetailLinks ? (
+                  <form onSubmit={handleSaveDetailLinks} className="space-y-3 pt-2">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-zinc-400 mb-1">
+                        Google Drive Link
+                      </label>
+                      <input
+                        type="url"
+                        placeholder="https://drive.google.com/..."
+                        value={detailLinksForm.driveLink}
+                        onChange={(e) => setDetailLinksForm({ ...detailLinksForm, driveLink: e.target.value })}
+                        className="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-white text-xs focus:outline-none focus:border-red-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-zinc-400 mb-1">
+                        Google Doc / Script Link
+                      </label>
+                      <input
+                        type="url"
+                        placeholder="https://docs.google.com/..."
+                        value={detailLinksForm.docLink}
+                        onChange={(e) => setDetailLinksForm({ ...detailLinksForm, docLink: e.target.value })}
+                        className="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-white text-xs focus:outline-none focus:border-red-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-zinc-400 mb-1">
+                        Output Master File URL
+                      </label>
+                      <input
+                        type="url"
+                        placeholder="https://..."
+                        value={detailLinksForm.outputUrl}
+                        onChange={(e) => setDetailLinksForm({ ...detailLinksForm, outputUrl: e.target.value })}
+                        className="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-white text-xs focus:outline-none focus:border-red-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-zinc-400 mb-1">
+                        Published Video URL
+                      </label>
+                      <input
+                        type="url"
+                        placeholder="https://youtube.com/..."
+                        value={detailLinksForm.publishedUrl}
+                        onChange={(e) => setDetailLinksForm({ ...detailLinksForm, publishedUrl: e.target.value })}
+                        className="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-white text-xs focus:outline-none focus:border-red-500"
+                      />
+                    </div>
+                    <div className="flex justify-end gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingDetailLinks(false)}
+                        className="px-3 py-1 rounded-lg bg-slate-200 dark:bg-zinc-800 text-slate-700 dark:text-zinc-300 text-xs font-medium"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={savingLinks}
+                        className="px-3 py-1 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-500 disabled:opacity-50"
+                      >
+                        {savingLinks ? 'Saving...' : 'Save Links'}
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="space-y-2">
+                    {activeDeliverable.driveLink || activeDeliverable.docLink || activeDeliverable.outputUrl || activeDeliverable.publishedUrl ? (
+                      <div className="flex flex-wrap gap-2">
+                        {/* Google Drive */}
+                        {activeDeliverable.driveLink && (
+                          <div className="inline-flex items-center rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs px-2.5 py-1.5 gap-1.5 shadow-sm">
+                            <HardDrive className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                            <span className="font-semibold">Google Drive</span>
+                            <a
+                              href={activeDeliverable.driveLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-bold underline ml-1 flex items-center gap-0.5"
+                            >
+                              Open <ExternalLink className="w-3 h-3" />
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(activeDeliverable.driveLink, 'cal-drive')}
+                              className="p-0.5 hover:bg-emerald-200/50 dark:hover:bg-emerald-800/50 rounded"
+                              title="Copy Link"
+                            >
+                              {copiedLink === 'cal-drive' ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3 text-emerald-600/70" />}
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Google Doc / Script */}
+                        {activeDeliverable.docLink && (
+                          <div className="inline-flex items-center rounded-lg bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 text-xs px-2.5 py-1.5 gap-1.5 shadow-sm">
+                            <FileText className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
+                            <span className="font-semibold">Doc / Script</span>
+                            <a
+                              href={activeDeliverable.docLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-bold underline ml-1 flex items-center gap-0.5"
+                            >
+                              Open <ExternalLink className="w-3 h-3" />
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(activeDeliverable.docLink, 'cal-doc')}
+                              className="p-0.5 hover:bg-blue-200/50 dark:hover:bg-blue-800/50 rounded"
+                              title="Copy Link"
+                            >
+                              {copiedLink === 'cal-doc' ? <Check className="w-3 h-3 text-blue-600" /> : <Copy className="w-3 h-3 text-blue-600/70" />}
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Output Master File */}
+                        {activeDeliverable.outputUrl && (
+                          <div className="inline-flex items-center rounded-lg bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 text-xs px-2.5 py-1.5 gap-1.5 shadow-sm">
+                            <LinkIcon className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
+                            <span className="font-semibold">Output Asset</span>
+                            <a
+                              href={activeDeliverable.outputUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-bold underline ml-1 flex items-center gap-0.5"
+                            >
+                              Open <ExternalLink className="w-3 h-3" />
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(activeDeliverable.outputUrl, 'cal-out')}
+                              className="p-0.5 hover:bg-purple-200/50 dark:hover:bg-purple-800/50 rounded"
+                              title="Copy Link"
+                            >
+                              {copiedLink === 'cal-out' ? <Check className="w-3 h-3 text-purple-600" /> : <Copy className="w-3 h-3 text-purple-600/70" />}
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Published Live Video */}
+                        {activeDeliverable.publishedUrl && (
+                          <div className="inline-flex items-center rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 text-xs px-2.5 py-1.5 gap-1.5 shadow-sm">
+                            <Globe className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                            <span className="font-semibold">Live URL</span>
+                            <a
+                              href={activeDeliverable.publishedUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-bold underline ml-1 flex items-center gap-0.5"
+                            >
+                              Open <ExternalLink className="w-3 h-3" />
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => copyToClipboard(activeDeliverable.publishedUrl, 'cal-pub')}
+                              className="p-0.5 hover:bg-amber-200/50 dark:hover:bg-amber-800/50 rounded"
+                              title="Copy Link"
+                            >
+                              {copiedLink === 'cal-pub' ? <Check className="w-3 h-3 text-amber-600" /> : <Copy className="w-3 h-3 text-amber-600/70" />}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-slate-500 dark:text-zinc-500 italic">
+                        No Drive, Doc, or Asset links attached yet. Click "Edit Links" to attach.
+                      </div>
+                    )}
+
+                    {activeDeliverable.outputNotes && (
+                      <div className="text-xs text-slate-700 dark:text-zinc-300 bg-white dark:bg-zinc-900 p-2.5 rounded-lg border border-slate-200 dark:border-zinc-800">
+                        <span className="font-bold text-[10px] uppercase text-slate-400 block mb-0.5">Notes:</span>
+                        {activeDeliverable.outputNotes}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {activeDeliverable.caption && (

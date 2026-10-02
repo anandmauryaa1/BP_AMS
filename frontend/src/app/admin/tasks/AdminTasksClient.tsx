@@ -16,6 +16,12 @@ import {
   AlertCircle,
   RefreshCw,
   X,
+  ExternalLink,
+  HardDrive,
+  FileText,
+  Link as LinkIcon,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { TaskStatus, Priority, TaskType } from '@/types';
 import { formatDate } from '@/lib/utils';
@@ -387,6 +393,42 @@ export default function AdminTasksClient({ initialTasks = [], initialProjects = 
                         </span>
                       )}
                     </div>
+
+                    {/* Output Links Attached by Assignee */}
+                    {(task.outputUrl || task.driveLink || task.docLink || task.notes) && (
+                      <div className="pt-2 border-t border-slate-100 dark:border-zinc-800/80 flex flex-wrap items-center gap-2 text-xs">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-zinc-500">
+                          Output:
+                        </span>
+                        {(task.outputUrl || task.driveLink) && (
+                          <a
+                            href={task.outputUrl || task.driveLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-semibold hover:underline"
+                          >
+                            <HardDrive className="w-3 h-3" />
+                            Drive / Output <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                        )}
+                        {task.docLink && (
+                          <a
+                            href={task.docLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-xs font-semibold hover:underline"
+                          >
+                            <FileText className="w-3 h-3" />
+                            Doc / Script <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                        )}
+                        {task.notes && (
+                          <span className="text-slate-500 dark:text-zinc-400 text-[11px] italic">
+                            "{task.notes}"
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Inline Assignment & Status Controls */}
