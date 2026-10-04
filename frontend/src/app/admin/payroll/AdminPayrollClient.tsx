@@ -100,10 +100,12 @@ export default function AdminPayrollClient() {
   const [showStructModal, setShowStructModal] = useState<boolean>(false);
   const [selectedEmp, setSelectedEmp] = useState<string>('');
   const [ctcAmount, setCtcAmount] = useState<number>(600000);
+  const [monthlyGross, setMonthlyGross] = useState<number>(50000);
+  const [hourlyRate, setHourlyRate] = useState<number>(313);
+  const [standardHours, setStandardHours] = useState<number>(160);
   const [basicPct, setBasicPct] = useState<number>(50);
   const [hraPct, setHraPct] = useState<number>(20);
   const [calculationType, setCalculationType] = useState<'HOURLY' | 'MONTHLY'>('HOURLY');
-  const [hourlyRate, setHourlyRate] = useState<number>(313);
   const [taxRegime, setTaxRegime] = useState<'NEW' | 'OLD' | 'NONE' | 'NA'>('NEW');
 
   // Component & Deduction ON/OFF Toggles
@@ -114,6 +116,45 @@ export default function AdminPayrollClient() {
   const [isBasicEligible, setIsBasicEligible] = useState<boolean>(true);
   const [isHraEligible, setIsHraEligible] = useState<boolean>(true);
   const [isSpecialAllowanceEligible, setIsSpecialAllowanceEligible] = useState<boolean>(true);
+
+  // Synchronized Bi-Directional Rate Handlers
+  const handleYearlyChange = (yearly: number) => {
+    const safeYearly = isNaN(yearly) ? 0 : yearly;
+    setCtcAmount(safeYearly);
+    const monthly = Math.round(safeYearly / 12);
+    setMonthlyGross(monthly);
+    const hrs = standardHours > 0 ? standardHours : 160;
+    setHourlyRate(Math.round(monthly / hrs));
+  };
+
+  const handleMonthlyChange = (monthly: number) => {
+    const safeMonthly = isNaN(monthly) ? 0 : monthly;
+    setMonthlyGross(safeMonthly);
+    setCtcAmount(Math.round(safeMonthly * 12));
+    const hrs = standardHours > 0 ? standardHours : 160;
+    setHourlyRate(Math.round(safeMonthly / hrs));
+  };
+
+  const handleHourlyChange = (rate: number) => {
+    const safeRate = isNaN(rate) ? 0 : rate;
+    setHourlyRate(safeRate);
+    const hrs = standardHours > 0 ? standardHours : 160;
+    const monthly = Math.round(safeRate * hrs);
+    setMonthlyGross(monthly);
+    setCtcAmount(Math.round(monthly * 12));
+  };
+
+  const handleStandardHoursChange = (hours: number) => {
+    const safeHrs = isNaN(hours) || hours <= 0 ? 160 : hours;
+    setStandardHours(safeHrs);
+    if (calculationType === 'HOURLY') {
+      const monthly = Math.round(hourlyRate * safeHrs);
+      setMonthlyGross(monthly);
+      setCtcAmount(Math.round(monthly * 12));
+    } else {
+      setHourlyRate(Math.round(monthlyGross / safeHrs));
+    }
+  };
 
   useEffect(() => {
     fetchInitialData();
@@ -220,11 +261,13 @@ export default function AdminPayrollClient() {
         body: JSON.stringify({
           employeeId: selectedEmp,
           annualCtc: ctcAmount,
+          monthlyGross,
+          hourlyRate,
+          standardHoursPerMonth: standardHours,
           basicPercentage: basicPct,
           hraPercentage: hraPct,
           calculationType,
-          hourlyRate,
-          regime: taxRegime,
+          taxRegime,
           isPfEligible,
           isEsicEligible,
           isPtEligible,
@@ -235,7 +278,10 @@ export default function AdminPayrollClient() {
         })
       });
       if (res.success) {
-        setMsg({ type: 'success', text: 'Salary structure updated with hourly calculation mode!' });
+        setMsg({
+          type: 'success',
+          text: `Salary structure updated! CTC: ₹${ctcAmount.toLocaleString('en-IN')}/yr · Gross: ₹${monthlyGross.toLocaleString('en-IN')}/mo · Hourly: ₹${hourlyRate}/hr (${calculationType} mode)`
+        });
         setShowStructModal(false);
       } else {
         setMsg({ type: 'error', text: res.error || 'Failed to update structure.' });
@@ -253,12 +299,16 @@ export default function AdminPayrollClient() {
         const s = res.structure || res.data;
         const ctc = s.annualCtc || s.ctc || 600000;
         const gross = s.monthlyGross || Math.round(ctc / 12);
+        const hrs = s.standardHoursPerMonth || 160;
+        const rate = s.hourlyRate || Math.round(gross / hrs);
         setCtcAmount(ctc);
+        setMonthlyGross(gross);
+        setHourlyRate(rate);
+        setStandardHours(hrs);
         setBasicPct(s.basicPercentage || s.basicPct || 50);
         setHraPct(s.hraPercentage || s.hraPct || 20);
         setCalculationType(s.calculationType || 'HOURLY');
-        setHourlyRate(s.hourlyRate || Math.round(gross / 160));
-        setTaxRegime(s.regime || 'NEW');
+        setTaxRegime(s.regime || s.taxRegime || 'NEW');
         setIsPfEligible(s.isPfEligible !== undefined ? Boolean(s.isPfEligible) : true);
         setIsEsicEligible(s.isEsicEligible !== undefined ? Boolean(s.isEsicEligible) : false);
         setIsPtEligible(s.isPtEligible !== undefined ? Boolean(s.isPtEligible) : true);
@@ -884,10 +934,29 @@ export default function AdminPayrollClient() {
 
       {/* MODAL: Set Salary Structure */}
       {showStructModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl max-w-md w-full border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">Configure Employee Salary Structure</h3>
-            <form onSubmit={handleSaveStructure} className="space-y-4">
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl max-w-2xl w-full border border-slate-200 dark:border-slate-800 shadow-2xl space-y-5 my-8">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Banknote className="w-5 h-5 text-rose-600" />
+                  Configure Salary Structure & Hourly Rates
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Set Yearly, Monthly, or Hourly rates with live bidirectional synchronization.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowStructModal(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveStructure} className="space-y-5">
+              {/* Employee Selection */}
               <div>
                 <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">
                   Select Employee <span className="text-rose-500">*</span>
@@ -899,67 +968,206 @@ export default function AdminPayrollClient() {
                     fetchEmployeeStructure(e.target.value);
                   }}
                   required
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium text-slate-900 dark:text-white"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-rose-500 focus:outline-none"
                 >
                   <option value="">-- Choose Employee --</option>
                   {employees.map((e) => (
-                    <option key={e._id} value={e._id}>{e.name} ({e.email})</option>
+                    <option key={e._id} value={e._id || e.employeeId}>
+                      {e.name} ({e.employeeId ? `${e.employeeId} · ` : ''}{e.email})
+                    </option>
                   ))}
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">
-                    Annual CTC (₹) <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    value={ctcAmount}
-                    onChange={(e) => {
-                      const newCtc = Number(e.target.value);
-                      setCtcAmount(newCtc);
-                      setHourlyRate(Math.round((newCtc / 12) / 160));
-                    }}
-                    required
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium text-slate-900 dark:text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">
-                    Calculation Basis <span className="text-rose-500">*</span>
-                  </label>
-                  <select
-                    value={calculationType}
-                    onChange={(e) => setCalculationType(e.target.value as any)}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium text-slate-900 dark:text-white"
-                  >
-                    <option value="HOURLY">Hourly Rate Basis (₹/hr worked)</option>
-                    <option value="MONTHLY">Monthly Fixed Base (with LOP)</option>
-                  </select>
-                </div>
-              </div>
-
+              {/* Quick Presets */}
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">
-                  Hourly Rate (₹ / hour) <span className="text-rose-500">*</span>
+                <label className="block text-[11px] font-semibold text-slate-400 uppercase mb-1.5">
+                  Quick CTC Presets
                 </label>
-                <input
-                  type="number"
-                  value={hourlyRate}
-                  onChange={(e) => setHourlyRate(Number(e.target.value))}
-                  required
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium text-slate-900 dark:text-white"
-                />
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { label: '₹3 LPA (₹25k/mo · ₹156/hr)', val: 300000 },
+                    { label: '₹6 LPA (₹50k/mo · ₹313/hr)', val: 600000 },
+                    { label: '₹9 LPA (₹75k/mo · ₹469/hr)', val: 900000 },
+                    { label: '₹12 LPA (₹1L/mo · ₹625/hr)', val: 1200000 },
+                    { label: '₹18 LPA (₹1.5L/mo · ₹938/hr)', val: 1800000 },
+                  ].map((preset) => (
+                    <button
+                      key={preset.val}
+                      type="button"
+                      onClick={() => handleYearlyChange(preset.val)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium transition ${
+                        ctcAmount === preset.val
+                          ? 'bg-rose-500 text-white font-semibold shadow-sm'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              {/* Synchronized 3-Way Rate Inputs */}
+              <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Live Bi-Directional Rate Converter
+                  </span>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Edit any value — other values sync automatically
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* Yearly CTC */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Yearly CTC (₹ / yr) <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        step="1000"
+                        value={ctcAmount || ''}
+                        onChange={(e) => handleYearlyChange(Number(e.target.value))}
+                        required
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                      />
+                    </div>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-0.5 block">
+                      ₹{ctcAmount.toLocaleString('en-IN')} / year
+                    </span>
+                  </div>
+
+                  {/* Monthly Gross */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Monthly Gross (₹ / mo) <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        step="100"
+                        value={monthlyGross || ''}
+                        onChange={(e) => handleMonthlyChange(Number(e.target.value))}
+                        required
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                      />
+                    </div>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-0.5 block">
+                      ₹{monthlyGross.toLocaleString('en-IN')} / month
+                    </span>
+                  </div>
+
+                  {/* Hourly Rate */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Hourly Rate (₹ / hr) <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={hourlyRate || ''}
+                        onChange={(e) => handleHourlyChange(Number(e.target.value))}
+                        required
+                        className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-bold text-rose-600 dark:text-rose-400 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                      />
+                    </div>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-0.5 block">
+                      ₹{hourlyRate.toLocaleString('en-IN')} / hour
+                    </span>
+                  </div>
+                </div>
+
+                {/* Standard Monthly Hours & Calculation Type */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200 dark:border-slate-700/60">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                      Standard Monthly Hours (hrs / mo)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="300"
+                      value={standardHours || 160}
+                      onChange={(e) => handleStandardHoursChange(Number(e.target.value))}
+                      className="w-full px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-medium text-slate-900 dark:text-white"
+                    />
+                    <span className="text-[10px] text-slate-400 mt-0.5 block">
+                      Default 160 hrs (8 hrs/day × 20 working days)
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                      Payroll Calculation Basis <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      value={calculationType}
+                      onChange={(e) => setCalculationType(e.target.value as any)}
+                      className="w-full px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-medium text-slate-900 dark:text-white"
+                    >
+                      <option value="HOURLY">Hourly Basis (₹{hourlyRate}/hr × Hours Worked)</option>
+                      <option value="MONTHLY">Monthly Fixed Base (₹{monthlyGross.toLocaleString('en-IN')}/mo with LOP)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Salary Breakdown Live Preview */}
+              {(() => {
+                const basic = Math.round(monthlyGross * (basicPct / 100));
+                const hra = Math.round(basic * (hraPct / 100));
+                const specialAllowance = Math.max(0, monthlyGross - basic - hra);
+                const epf = isPfEligible ? Math.min(1800, Math.round(basic * 0.12)) : 0;
+                const esic = isEsicEligible ? Math.round(monthlyGross * 0.0075) : 0;
+                const pt = isPtEligible && monthlyGross > 10000 ? 200 : 0;
+                const totalDeductions = epf + esic + pt;
+                const netTakeHome = Math.max(0, monthlyGross - totalDeductions);
+
+                return (
+                  <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-700/60 space-y-2">
+                    <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Live Compensation Breakdown Preview (Monthly / Yearly)
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                      <div className="p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+                        <span className="text-[10px] text-slate-400 block">Basic Pay ({basicPct}%)</span>
+                        <span className="font-bold text-slate-900 dark:text-white">₹{basic.toLocaleString('en-IN')}</span>
+                      </div>
+                      <div className="p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+                        <span className="text-[10px] text-slate-400 block">HRA ({hraPct}% Basic)</span>
+                        <span className="font-bold text-slate-900 dark:text-white">₹{hra.toLocaleString('en-IN')}</span>
+                      </div>
+                      <div className="p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
+                        <span className="text-[10px] text-slate-400 block">Special Allowance</span>
+                        <span className="font-bold text-slate-900 dark:text-white">₹{specialAllowance.toLocaleString('en-IN')}</span>
+                      </div>
+                      <div className="p-2 bg-emerald-50 dark:bg-emerald-950/40 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 block">Est. Net Take Home</span>
+                        <span className="font-bold text-emerald-700 dark:text-emerald-300">₹{netTakeHome.toLocaleString('en-IN')}/mo</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Percentage Component Configuration & Tax Regime */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">
-                    Basic (% of CTC) <span className="text-rose-500">*</span>
+                    Basic (% of Gross) <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="number"
+                    min="10"
+                    max="100"
                     value={basicPct}
                     onChange={(e) => setBasicPct(Number(e.target.value))}
                     required
@@ -968,38 +1176,39 @@ export default function AdminPayrollClient() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">
-                    HRA (% of Basic) <span className="text-slate-400 font-normal text-[10px]">(Optional)</span>
+                    HRA (% of Basic)
                   </label>
                   <input
                     type="number"
+                    min="0"
+                    max="100"
                     value={hraPct}
                     onChange={(e) => setHraPct(Number(e.target.value))}
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium text-slate-900 dark:text-white"
                   />
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">
-                  TDS Tax Regime <span className="text-slate-400 font-normal text-[10px]">(Optional)</span>
-                </label>
-                <select
-                  value={taxRegime}
-                  onChange={(e) => setTaxRegime(e.target.value as any)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium text-slate-900 dark:text-white"
-                >
-                  <option value="NA">N/A - Not Applicable (Exempt / Below Taxable Slab)</option>
-                  <option value="NEW">New Tax Regime (Lower Slab Rates)</option>
-                  <option value="OLD">Old Tax Regime (With 80C/80D Exemptions)</option>
-                </select>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">
+                    TDS Tax Regime
+                  </label>
+                  <select
+                    value={taxRegime}
+                    onChange={(e) => setTaxRegime(e.target.value as any)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-medium text-slate-900 dark:text-white"
+                  >
+                    <option value="NEW">New Tax Regime (Default)</option>
+                    <option value="OLD">Old Tax Regime (With 80C/80D)</option>
+                    <option value="NA">N/A (Exempt / Below Slab)</option>
+                  </select>
+                </div>
               </div>
 
               {/* Component & Statutory Deduction Toggles */}
               <div className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-2">
                 <label className="block text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">
-                  Feature Switches: Enable / Disable Components & Deductions
+                  Feature Switches: Enable / Disable Components & Statutory Deductions
                 </label>
-                <div className="grid grid-cols-2 gap-2 text-xs font-medium text-slate-700 dark:text-slate-300">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-medium text-slate-700 dark:text-slate-300">
                   <label className="flex items-center gap-2 cursor-pointer bg-slate-50 dark:bg-slate-800/60 p-2 rounded-lg border border-slate-200 dark:border-slate-700/60">
                     <input
                       type="checkbox"
@@ -1007,7 +1216,7 @@ export default function AdminPayrollClient() {
                       onChange={(e) => setIsPfEligible(e.target.checked)}
                       className="rounded text-rose-600 focus:ring-rose-500 w-4 h-4"
                     />
-                    <span>EPF (12% Basic)</span>
+                    <span>EPF (12%)</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer bg-slate-50 dark:bg-slate-800/60 p-2 rounded-lg border border-slate-200 dark:border-slate-700/60">
                     <input
@@ -1016,7 +1225,7 @@ export default function AdminPayrollClient() {
                       onChange={(e) => setIsEsicEligible(e.target.checked)}
                       className="rounded text-rose-600 focus:ring-rose-500 w-4 h-4"
                     />
-                    <span>ESIC (0.75% Gross)</span>
+                    <span>ESIC (0.75%)</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer bg-slate-50 dark:bg-slate-800/60 p-2 rounded-lg border border-slate-200 dark:border-slate-700/60">
                     <input
@@ -1025,7 +1234,7 @@ export default function AdminPayrollClient() {
                       onChange={(e) => setIsPtEligible(e.target.checked)}
                       className="rounded text-rose-600 focus:ring-rose-500 w-4 h-4"
                     />
-                    <span>Professional Tax (PT)</span>
+                    <span>PT (₹200)</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer bg-slate-50 dark:bg-slate-800/60 p-2 rounded-lg border border-slate-200 dark:border-slate-700/60">
                     <input
@@ -1034,7 +1243,7 @@ export default function AdminPayrollClient() {
                       onChange={(e) => setIsTdsEligible(e.target.checked)}
                       className="rounded text-rose-600 focus:ring-rose-500 w-4 h-4"
                     />
-                    <span>TDS Tax Deduction</span>
+                    <span>TDS Tax</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer bg-slate-50 dark:bg-slate-800/60 p-2 rounded-lg border border-slate-200 dark:border-slate-700/60">
                     <input
@@ -1043,7 +1252,7 @@ export default function AdminPayrollClient() {
                       onChange={(e) => setIsBasicEligible(e.target.checked)}
                       className="rounded text-rose-600 focus:ring-rose-500 w-4 h-4"
                     />
-                    <span>Earned Basic Pay</span>
+                    <span>Basic Pay</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer bg-slate-50 dark:bg-slate-800/60 p-2 rounded-lg border border-slate-200 dark:border-slate-700/60">
                     <input
@@ -1052,7 +1261,7 @@ export default function AdminPayrollClient() {
                       onChange={(e) => setIsHraEligible(e.target.checked)}
                       className="rounded text-rose-600 focus:ring-rose-500 w-4 h-4"
                     />
-                    <span>Earned HRA</span>
+                    <span>HRA</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer col-span-2 bg-slate-50 dark:bg-slate-800/60 p-2 rounded-lg border border-slate-200 dark:border-slate-700/60">
                     <input
@@ -1061,12 +1270,12 @@ export default function AdminPayrollClient() {
                       onChange={(e) => setIsSpecialAllowanceEligible(e.target.checked)}
                       className="rounded text-rose-600 focus:ring-rose-500 w-4 h-4"
                     />
-                    <span>Earned Special Allowance</span>
+                    <span>Special Allowance</span>
                   </label>
                 </div>
               </div>
 
-              <div className="pt-3 flex justify-end gap-3">
+              <div className="pt-3 flex justify-end gap-3 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => setShowStructModal(false)}
@@ -1076,9 +1285,9 @@ export default function AdminPayrollClient() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-rose-600 text-white text-sm font-semibold rounded-xl hover:bg-rose-700 transition"
+                  className="px-5 py-2 bg-rose-600 text-white text-sm font-semibold rounded-xl hover:bg-rose-700 transition shadow-sm"
                 >
-                  Save Salary Structure & Feature Toggles
+                  Save Salary Structure & Hourly Rates
                 </button>
               </div>
             </form>

@@ -73,7 +73,7 @@ export async function generateMonthlyPayroll(month, year, employeeId = null) {
             : Math.round((structure.monthlyGross || (structure.annualCtc / 12) || 0) / standardHours);
 
         let earnedGross = 0;
-        if (calculationType === 'HOURLY' || hourlyRate > 0) {
+        if (calculationType === 'HOURLY') {
             if (attendanceRecords.length > 0) {
                 earnedGross = Math.round(totalWorkingHours * hourlyRate);
             } else {

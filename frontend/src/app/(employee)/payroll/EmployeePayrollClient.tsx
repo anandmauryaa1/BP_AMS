@@ -222,9 +222,21 @@ export default function EmployeePayrollClient() {
                     </span>
                   </div>
                   <div className="flex justify-between text-sm pt-2">
-                    <span className="text-slate-500">Hourly Pay Rate</span>
+                    <span className="text-slate-500">Annual CTC (Yearly)</span>
                     <span className="font-bold text-slate-900 dark:text-white">
-                      ₹{structure.hourlyRate || Math.round(((structure.annualCtc || 600000) / 12) / 160)} / hr
+                      ₹{(structure.annualCtc || structure.ctc || ((structure.monthlyGross || 50000) * 12))?.toLocaleString('en-IN')} / yr
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm pt-2">
+                    <span className="text-slate-500">Target Monthly Gross</span>
+                    <span className="font-bold text-slate-900 dark:text-white">
+                      ₹{(structure.monthlyGross || Math.round((structure.annualCtc || structure.ctc || 600000) / 12))?.toLocaleString('en-IN')} / mo
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm pt-2">
+                    <span className="text-slate-500">Hourly Pay Rate ({structure.standardHoursPerMonth || 160} hrs/mo)</span>
+                    <span className="font-bold text-rose-600 dark:text-rose-400">
+                      ₹{structure.hourlyRate || Math.round(((structure.monthlyGross || (structure.annualCtc / 12) || 50000)) / (structure.standardHoursPerMonth || 160))} / hr
                     </span>
                   </div>
                   <div className="flex justify-between text-sm pt-2">
@@ -239,10 +251,6 @@ export default function EmployeePayrollClient() {
                     <span className="text-slate-500">Special Allowance</span>
                     <span className="font-semibold text-slate-900 dark:text-white">₹{structure.specialAllowance?.toLocaleString('en-IN')}</span>
                   </div>
-                  <div className="flex justify-between text-sm pt-2 font-bold text-emerald-600">
-                    <span>Target Monthly Gross (160 hrs)</span>
-                    <span>₹{((structure.annualCtc || 0) / 12)?.toLocaleString('en-IN')}</span>
-                  </div>
                 </div>
               </div>
 
@@ -256,24 +264,36 @@ export default function EmployeePayrollClient() {
                   <div className="flex justify-between text-sm pt-2">
                     <span className="text-slate-500">Employee Provident Fund (EPF 12%)</span>
                     <span className="font-semibold text-slate-900 dark:text-white">
-                      {structure.pfEligible ? '₹1,800 / mo' : 'N/A'}
+                      {structure.isPfEligible !== false ? 'Active (12% of Basic)' : 'Exempt'}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm pt-2">
                     <span className="text-slate-500">ESIC Insurance (0.75%)</span>
                     <span className="font-semibold text-slate-900 dark:text-white">
-                      {structure.esicEligible ? 'Active' : 'Exempt'}
+                      {structure.isEsicEligible ? 'Active (0.75% of Gross)' : 'Exempt'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm pt-2">
+                    <span className="text-slate-500">Professional Tax (PT)</span>
+                    <span className="font-semibold text-slate-900 dark:text-white">
+                      {structure.isPtEligible !== false ? '₹200 / mo' : 'Exempt'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm pt-2">
+                    <span className="text-slate-500">TDS Income Tax Deduction</span>
+                    <span className="font-semibold text-slate-900 dark:text-white">
+                      {structure.isTdsEligible !== false ? 'Active (Monthly Slab)' : 'Exempt'}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm pt-2">
                     <span className="text-slate-500">Tax Regime Selected</span>
                     <span className="font-bold text-rose-600">
-                      {structure.regime || 'NEW'} TAX REGIME
+                      {structure.taxRegime || structure.regime || 'NEW'} TAX REGIME
                     </span>
                   </div>
                   <div className="flex justify-between text-sm pt-2 font-bold text-slate-900 dark:text-white">
                     <span>Annual CTC Package</span>
-                    <span>₹{structure.annualCtc?.toLocaleString('en-IN')}</span>
+                    <span>₹{(structure.annualCtc || structure.ctc || 0)?.toLocaleString('en-IN')}</span>
                   </div>
                 </div>
               </div>

@@ -57,10 +57,26 @@ router.post('/structure', requireManagerOrAdmin, async (req, res) => {
         }).lean();
 
         const empCode = user?.employeeId ? String(user.employeeId).toUpperCase() : String(rawEmpId).toUpperCase();
-        const userIdStr = user?._id ? String(user._id) : (String(rawEmpId).length === 24 ? String(rawEmpId) : undefined);
+        const standardHoursPerMonth = parseFloat(req.body.standardHoursPerMonth || req.body.standardHours || 160);
 
-        const annualCtc = parseFloat(req.body.annualCtc || req.body.ctc || 600000);
-        const monthlyGross = Math.round(annualCtc / 12);
+        let annualCtc = 600000;
+        let monthlyGross = 50000;
+        let hourlyRate = 313;
+
+        if (req.body.annualCtc || req.body.ctc) {
+            annualCtc = parseFloat(req.body.annualCtc || req.body.ctc);
+            monthlyGross = req.body.monthlyGross ? parseFloat(req.body.monthlyGross) : Math.round(annualCtc / 12);
+            hourlyRate = req.body.hourlyRate ? parseFloat(req.body.hourlyRate) : Math.round(monthlyGross / (standardHoursPerMonth || 160));
+        } else if (req.body.monthlyGross) {
+            monthlyGross = parseFloat(req.body.monthlyGross);
+            annualCtc = Math.round(monthlyGross * 12);
+            hourlyRate = req.body.hourlyRate ? parseFloat(req.body.hourlyRate) : Math.round(monthlyGross / (standardHoursPerMonth || 160));
+        } else if (req.body.hourlyRate) {
+            hourlyRate = parseFloat(req.body.hourlyRate);
+            monthlyGross = Math.round(hourlyRate * (standardHoursPerMonth || 160));
+            annualCtc = Math.round(monthlyGross * 12);
+        }
+
         const basicPct = parseFloat(req.body.basicPercentage || req.body.basicPct || 50) / 100;
         const hraPct = parseFloat(req.body.hraPercentage || req.body.hraPct || 20) / 100;
 
@@ -69,10 +85,6 @@ router.post('/structure', requireManagerOrAdmin, async (req, res) => {
         const specialAllowance = req.body.specialAllowance ? parseFloat(req.body.specialAllowance) : Math.max(0, monthlyGross - basic - hra);
 
         const calculationType = req.body.calculationType || req.body.payType || 'HOURLY';
-        const standardHoursPerMonth = parseFloat(req.body.standardHoursPerMonth || req.body.standardHours || 160);
-        const hourlyRate = req.body.hourlyRate
-            ? parseFloat(req.body.hourlyRate)
-            : Math.round(monthlyGross / (standardHoursPerMonth || 160));
 
         const payload = {
             employeeId: empCode,
