@@ -675,8 +675,43 @@ router.post('/test-email', async (req, res) => {
 router.get('/audit-logs', async (req, res) => {
     try {
         await connectToDatabase();
-        const logs = await AuditLog.find().sort({ createdAt: -1 }).limit(100).lean();
-        return res.json({ success: true, data: logs });
+        const { action, search, limit = 100, page = 1 } = req.query;
+        const query = {};
+        if (action && action !== 'ALL') {
+            query.action = action;
+        }
+        if (search && typeof search === 'string' && search.trim() !== '') {
+            const regex = new RegExp(search.trim(), 'i');
+            query.$or = [
+                { actorName: regex },
+                { actorRole: regex },
+                { action: regex },
+                { targetType: regex },
+                { targetId: regex },
+                { ipAddress: regex }
+            ];
+        }
+        const limitNum = Math.min(Math.max(1, parseInt(limit, 10) || 100), 500);
+        const pageNum = Math.max(1, parseInt(page, 10) || 1);
+        const skip = (pageNum - 1) * limitNum;
+
+        const [logs, total] = await Promise.all([
+            AuditLog.find(query).sort({ timestamp: -1, createdAt: -1 }).skip(skip).limit(limitNum).lean(),
+            AuditLog.countDocuments(query)
+        ]);
+
+        const formattedLogs = logs.map(l => ({
+            ...l,
+            createdAt: l.createdAt || l.timestamp || new Date(),
+            timestamp: l.timestamp || l.createdAt || new Date()
+        }));
+
+        return res.json({
+            success: true,
+            data: { logs: formattedLogs, total },
+            logs: formattedLogs,
+            total
+        });
     }
     catch (error) {
         console.error('[API:Admin:AuditLogs] Error:', error);

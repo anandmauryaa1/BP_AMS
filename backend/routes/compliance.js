@@ -8,6 +8,7 @@ import {
     generatePayslipHtml,
     generateForm16Summary,
 } from '../services/compliance-exporter.js';
+import { logAuditEvent } from '../services/audit.js';
 
 const router = Router();
 router.use(authenticateToken);
@@ -69,6 +70,17 @@ router.get('/epf-ecr', requireManagerOrAdmin, async (req, res) => {
         }
         const ecrText = await generateEpfEcrFile(parseInt(month, 10), parseInt(year, 10));
 
+        await logAuditEvent({
+            actorId: req.user?.userId || req.user?._id || 'ADMIN',
+            actorName: req.user?.name || req.user?.username || 'Admin',
+            actorRole: req.user?.role || 'ADMIN',
+            action: 'COMPLIANCE_EXPORT_DOWNLOADED',
+            targetId: `EPF_ECR_${year}_${month}`,
+            targetType: 'COMPLIANCE_REPORT',
+            metadata: { reportType: 'EPF_ECR', month: parseInt(month, 10), year: parseInt(year, 10) },
+            ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1'
+        });
+
         res.setHeader('Content-Type', 'text/plain');
         res.setHeader('Content-Disposition', `attachment; filename="EPF_ECR_${year}_${month}.txt"`);
         return res.send(ecrText);
@@ -87,6 +99,17 @@ router.get('/esic-return', requireManagerOrAdmin, async (req, res) => {
         }
         const csvData = await generateEsicReturnFile(parseInt(month, 10), parseInt(year, 10));
 
+        await logAuditEvent({
+            actorId: req.user?.userId || req.user?._id || 'ADMIN',
+            actorName: req.user?.name || req.user?.username || 'Admin',
+            actorRole: req.user?.role || 'ADMIN',
+            action: 'COMPLIANCE_EXPORT_DOWNLOADED',
+            targetId: `ESIC_Return_${year}_${month}`,
+            targetType: 'COMPLIANCE_REPORT',
+            metadata: { reportType: 'ESIC_RETURN', month: parseInt(month, 10), year: parseInt(year, 10) },
+            ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1'
+        });
+
         res.setHeader('Content-Type', 'text/csv');
         res.setHeader('Content-Disposition', `attachment; filename="ESIC_Return_${year}_${month}.csv"`);
         return res.send(csvData);
@@ -96,8 +119,8 @@ router.get('/esic-return', requireManagerOrAdmin, async (req, res) => {
     }
 });
 
-// GET /api/compliance/form-16 - Download Form 16 Tax Certificate Summary
-router.get('/form-16', async (req, res) => {
+// GET /api/compliance/form-16 & /api/compliance/form16 - Download Form 16 Tax Certificate Summary
+const handleForm16 = async (req, res) => {
     try {
         const targetEmpId = req.user?.role === 'EMPLOYEE'
             ? String(req.user.employeeId).toUpperCase()
@@ -110,6 +133,9 @@ router.get('/form-16', async (req, res) => {
         console.error('[API:Compliance:Form16] Error:', error);
         return res.status(500).json({ success: false, error: 'Failed to generate Form 16 summary' });
     }
-});
+};
+
+router.get('/form-16', handleForm16);
+router.get('/form16', handleForm16);
 
 export default router;

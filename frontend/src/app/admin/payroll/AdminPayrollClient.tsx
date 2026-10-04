@@ -285,7 +285,7 @@ export default function AdminPayrollClient() {
 
   const downloadForm16 = () => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : '';
-    window.open(`/api/compliance/form16?year=${year}&token=${token}`, '_blank');
+    window.open(`/api/compliance/form-16?financialYear=${year}-${year + 1}&year=${year}&token=${token}`, '_blank');
   };
 
   const viewPayslip = (recordId: string) => {
@@ -316,7 +316,14 @@ export default function AdminPayrollClient() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <a
+            href="/admin/audit-logs"
+            className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-medium rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition flex items-center gap-2"
+          >
+            <ShieldCheck className="w-4 h-4 text-rose-500" />
+            Audit Trail
+          </a>
           <button
             onClick={() => setShowStructModal(true)}
             className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-medium rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition flex items-center gap-2"

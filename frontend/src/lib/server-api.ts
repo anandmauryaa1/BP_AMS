@@ -178,7 +178,7 @@ export const getAttendanceRecords = cache(async (date: string) => {
 /** Fetch audit logs — revalidates every 30s */
 export const getAuditLogs = cache(async () => {
   const res = await serverFetch('/api/admin/audit-logs?limit=100', { next: { revalidate: 30, tags: ['audit-logs'] } });
-  return res.data?.logs || [];
+  return res.data?.logs || res.logs || (Array.isArray(res.data) ? res.data : []);
 });
 
 /** Fetch employee daily plan queue (for employee dashboard) — revalidates every 30s */

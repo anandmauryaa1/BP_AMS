@@ -7,6 +7,7 @@ import { PayrollRun } from '../models/PayrollRun.js';
 import { User } from '../models/User.js';
 import { authenticateToken, requireManagerOrAdmin } from '../middleware/auth.js';
 import { generateMonthlyPayroll } from '../services/payroll-calculator.js';
+import { logAuditEvent } from '../services/audit.js';
 
 const router = Router();
 router.use(authenticateToken);
@@ -107,6 +108,24 @@ router.post('/structure', requireManagerOrAdmin, async (req, res) => {
             payload,
             { new: true, upsert: true }
         );
+
+        await logAuditEvent({
+            actorId: req.user?.userId || req.user?._id || 'ADMIN',
+            actorName: req.user?.name || req.user?.username || 'Admin',
+            actorRole: req.user?.role || 'ADMIN',
+            action: 'SALARY_STRUCTURE_UPDATED',
+            targetId: empCode,
+            targetType: 'EMPLOYEE_PAYROLL_STRUCTURE',
+            metadata: {
+                annualCtc,
+                monthlyGross,
+                calculationType,
+                hourlyRate,
+                taxRegime: payload.taxRegime
+            },
+            ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1'
+        });
+
         return res.status(201).json({ success: true, data: structure, structure: structure });
     } catch (error) {
         console.error('[API:Payroll:Structure:POST] Error:', error);
@@ -152,6 +171,18 @@ router.post('/tax-declaration', async (req, res) => {
             { ...req.body, employeeId: String(empId).toUpperCase(), financialYear: fy },
             { new: true, upsert: true }
         );
+
+        await logAuditEvent({
+            actorId: req.user?.userId || req.user?._id || 'EMPLOYEE',
+            actorName: req.user?.name || req.user?.username || 'Employee',
+            actorRole: req.user?.role || 'EMPLOYEE',
+            action: 'TAX_DECLARATION_UPDATED',
+            targetId: String(empId).toUpperCase(),
+            targetType: 'TAX_DECLARATION',
+            metadata: { financialYear: fy, regime: req.body.regime },
+            ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1'
+        });
+
         return res.json({ success: true, data: decl, declaration: decl });
     } catch (error) {
         console.error('[API:Payroll:TaxDecl:POST] Error:', error);
@@ -262,6 +293,23 @@ router.post('/loans', async (req, res) => {
             approvedBy: initialStatus === 'ACTIVE' ? (req.user?.name || 'Admin') : undefined,
         });
 
+        await logAuditEvent({
+            actorId: req.user?.userId || req.user?._id || 'USER',
+            actorName: req.user?.name || req.user?.username || 'User',
+            actorRole: req.user?.role || 'EMPLOYEE',
+            action: 'SALARY_LOAN_CREATED',
+            targetId: loan._id.toString(),
+            targetType: 'SALARY_LOAN',
+            metadata: {
+                employeeId: empCode,
+                loanAmount,
+                tenureMonths,
+                monthlyEmi,
+                status: initialStatus
+            },
+            ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1'
+        });
+
         return res.status(201).json({
             success: true,
             data: { ...loan.toObject(), maxLoanAllowed },
@@ -320,6 +368,30 @@ router.put('/loans/:id', requireManagerOrAdmin, async (req, res) => {
         }
 
         await loan.save();
+
+        const actionName = action === 'approve' ? 'SALARY_LOAN_APPROVED'
+            : action === 'reject' ? 'SALARY_LOAN_REJECTED'
+            : action === 'close' ? 'SALARY_LOAN_CLOSED'
+            : action === 'revise' ? 'SALARY_LOAN_REVISED'
+            : 'SALARY_LOAN_UPDATED';
+
+        await logAuditEvent({
+            actorId: req.user?.userId || req.user?._id || 'ADMIN',
+            actorName: req.user?.name || req.user?.username || 'Admin',
+            actorRole: req.user?.role || 'ADMIN',
+            action: actionName,
+            targetId: loan._id.toString(),
+            targetType: 'SALARY_LOAN',
+            metadata: {
+                employeeId: loan.employeeId,
+                loanAmount: loan.loanAmount,
+                remainingBalance: loan.remainingBalance,
+                status: loan.status,
+                action
+            },
+            ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1'
+        });
+
         return res.json({ success: true, data: loan, loan: loan });
     } catch (error) {
         console.error('[API:Payroll:Loans:PUT] Error:', error);
@@ -381,6 +453,23 @@ const handleRunPayroll = async (req, res) => {
             totalTds,
             count: records.length
         };
+
+        await logAuditEvent({
+            actorId: req.user?.userId || req.user?._id || 'ADMIN',
+            actorName: req.user?.name || req.user?.username || 'Admin',
+            actorRole: req.user?.role || 'ADMIN',
+            action: 'PAYROLL_GENERATED',
+            targetId: `${year}-${String(month).padStart(2, '0')}`,
+            targetType: 'PAYROLL_RUN',
+            metadata: {
+                month,
+                year,
+                employeeCount: records.length,
+                totalNetPay: summary.totalNetPay,
+                totalGross: summary.totalGross
+            },
+            ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1'
+        });
 
         return res.json({
             success: true,
