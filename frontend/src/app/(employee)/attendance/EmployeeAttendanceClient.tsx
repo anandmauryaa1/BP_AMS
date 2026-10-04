@@ -13,10 +13,20 @@ import { formatTime, formatMinutes, formatDate } from '@/lib/utils';
 import { Calendar, Clock, Coffee, AlertCircle, FileEdit, Check, Filter } from 'lucide-react';
 import { IAttendance, SessionPayload } from '@/types';
 
-export default function EmployeeAttendanceClient() {
-  const [user, setUser] = useState<SessionPayload | null>(null);
-  const [records, setRecords] = useState<IAttendance[]>([]);
-  const [summary, setSummary] = useState({
+interface EmployeeAttendanceClientProps {
+  initialRecords?: IAttendance[];
+  initialSummary?: any;
+  initialUser?: SessionPayload | null;
+}
+
+export default function EmployeeAttendanceClient({
+  initialRecords = [],
+  initialSummary = null,
+  initialUser = null,
+}: EmployeeAttendanceClientProps) {
+  const [user, setUser] = useState<SessionPayload | null>(initialUser || null);
+  const [records, setRecords] = useState<IAttendance[]>(initialRecords || []);
+  const [summary, setSummary] = useState(initialSummary || {
     totalDays: 0,
     presentDays: 0,
     completedDays: 0,
@@ -27,7 +37,7 @@ export default function EmployeeAttendanceClient() {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   });
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!initialRecords || initialRecords.length === 0);
 
   // Correction Modal State
   const [selectedRecord, setSelectedRecord] = useState<IAttendance | null>(null);
@@ -40,9 +50,11 @@ export default function EmployeeAttendanceClient() {
   const fetchHistory = useCallback(async () => {
     setIsLoading(true);
     try {
-      const meRes = await fetch('/api/auth/me');
-      const meData = await meRes.json();
-      if (meData.success) setUser(meData.data);
+      if (!user) {
+        const meRes = await fetch('/api/auth/me');
+        const meData = await meRes.json();
+        if (meData.success) setUser(meData.data);
+      }
 
       const res = await fetch(`/api/attendance/history?month=${selectedMonth}`);
       const data = await res.json();
@@ -57,11 +69,16 @@ export default function EmployeeAttendanceClient() {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedMonth]);
+  }, [selectedMonth, user]);
 
+  const hasFetchedOnce = React.useRef(Boolean(initialRecords && initialRecords.length > 0));
   useEffect(() => {
-    fetchHistory();
-  }, [fetchHistory]);
+    if (!hasFetchedOnce.current) {
+      fetchHistory();
+    } else {
+      hasFetchedOnce.current = false;
+    }
+  }, [selectedMonth]);
 
   const openCorrectionModal = (record: IAttendance) => {
     setSelectedRecord(record);

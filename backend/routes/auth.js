@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { connectToDatabase } from '../db.js';
 import { User } from '../models/User.js';
+import { Notification } from '../models/Notification.js';
+import { PayrollStructure } from '../models/PayrollStructure.js';
 import { PasswordResetToken } from '../models/PasswordResetToken.js';
 import { verifyPassword, hashPassword, createSessionToken, generateResetToken, hashResetToken, AUTH_COOKIE_NAME, authenticateToken, } from '../middleware/auth.js';
 import { logAuditEvent } from '../services/audit.js';
@@ -191,6 +193,71 @@ router.get('/me', authenticateToken, async (req, res) => {
     catch (error) {
         console.error('[API:Me] Error fetching user profile:', error);
         return res.status(500).json({ success: false, error: 'Failed to fetch profile' });
+    }
+});
+
+router.get('/initial-state', authenticateToken, async (req, res) => {
+    try {
+        await connectToDatabase();
+        const userId = req.user?.userId;
+        const employeeId = req.user?.employeeId;
+
+        const [user, notifications, unreadCount, structure] = await Promise.all([
+            User.findById(userId).lean(),
+            Notification.find({
+                $or: [
+                    { userId: String(userId) },
+                    ...(employeeId ? [{ userId: String(employeeId) }] : [])
+                ]
+            }).sort({ createdAt: -1 }).limit(10).lean(),
+            Notification.countDocuments({
+                $or: [
+                    { userId: String(userId), read: false, isRead: { $ne: true } },
+                    ...(employeeId ? [{ userId: String(employeeId), read: false, isRead: { $ne: true } }] : [])
+                ]
+            }),
+            PayrollStructure.findOne({
+                $or: [
+                    ...(employeeId ? [{ employeeId: String(employeeId).toUpperCase() }, { employeeId: String(employeeId) }] : []),
+                    ...(userId ? [{ userId: String(userId) }, { employeeId: String(userId) }] : [])
+                ]
+            }).lean()
+        ]);
+
+        if (!user) {
+            return res.status(404).json({ success: false, error: 'User not found' });
+        }
+
+        const userPayload = {
+            userId: user._id.toString(),
+            employeeId: user.employeeId,
+            username: user.username,
+            name: user.name,
+            email: user.email,
+            department: user.department,
+            role: user.role,
+            status: user.status,
+            mustChangePassword: user.mustChangePassword,
+            createdAt: user.createdAt,
+        };
+
+        return res.json({
+            success: true,
+            data: {
+                user: userPayload,
+                notifications: notifications || [],
+                unreadCount: unreadCount || 0,
+                structureSummary: structure ? {
+                    monthlyGross: structure.monthlyGross,
+                    annualCtc: structure.annualCtc || structure.ctc,
+                    hourlyRate: structure.hourlyRate,
+                    calculationType: structure.calculationType,
+                } : null
+            }
+        });
+    } catch (error) {
+        console.error('[API:InitialState] Error fetching initial state:', error);
+        return res.status(500).json({ success: false, error: 'Failed to fetch initial state' });
     }
 });
 router.post('/forgot-password', async (req, res) => {

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { getMyAttendanceHistory } from '@/lib/server-api';
 import EmployeeAttendanceClient from './EmployeeAttendanceClient';
 
 export const metadata: Metadata = {
@@ -6,7 +7,14 @@ export const metadata: Metadata = {
   description: 'View your attendance history and work sessions.',
 };
 
-export default function EmployeeAttendancePage() {
-  // Attendance history is date-range paginated — loads client-side
-  return <EmployeeAttendanceClient />;
+export default async function EmployeeAttendancePage() {
+  const history = await getMyAttendanceHistory();
+
+  return (
+    <EmployeeAttendanceClient
+      initialRecords={history.records}
+      initialSummary={history.summary}
+      initialUser={history.user}
+    />
+  );
 }

@@ -23,44 +23,55 @@ import {
   Sparkles,
 } from 'lucide-react';
 
-export default function AdminSettingsClient() {
+interface AdminSettingsClientProps {
+  initialSettings?: any;
+  initialUser?: any;
+}
+
+export default function AdminSettingsClient({
+  initialSettings = null,
+  initialUser = null,
+}: AdminSettingsClientProps) {
+  const s = initialSettings || {};
   const [activeTab, setActiveTab] = useState<'company' | 'attendance' | 'payroll' | 'leaves' | 'controls'>('company');
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(!initialSettings);
   const [saving, setSaving] = useState<boolean>(false);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Form State
-  const [companyName, setCompanyName] = useState<string>('BP Production & Media AMS');
-  const [companyLegalName, setCompanyLegalName] = useState<string>('BP Media Solutions Ltd.');
-  const [taxId, setTaxId] = useState<string>('GSTIN27AAACB1234C1Z1');
-  const [epfCode, setEpfCode] = useState<string>('MH/BAN/0012345/000');
-  const [esicCode, setEsicCode] = useState<string>('31000123450000101');
-  const [companyEmail, setCompanyEmail] = useState<string>('hr@bpmedia.com');
-  const [companyPhone, setCompanyPhone] = useState<string>('+91 98765 43210');
-  const [companyAddress, setCompanyAddress] = useState<string>('Studio Hub, 4th Floor, Tech Park, Mumbai, India');
+  const [companyName, setCompanyName] = useState<string>(s.companyName || 'BP Production & Media AMS');
+  const [companyLegalName, setCompanyLegalName] = useState<string>(s.companyLegalName || 'BP Media Solutions Ltd.');
+  const [taxId, setTaxId] = useState<string>(s.taxId || 'GSTIN27AAACB1234C1Z1');
+  const [epfCode, setEpfCode] = useState<string>(s.epfCode || 'MH/BAN/0012345/000');
+  const [esicCode, setEsicCode] = useState<string>(s.esicCode || '31000123450000101');
+  const [companyEmail, setCompanyEmail] = useState<string>(s.companyEmail || 'hr@bpmedia.com');
+  const [companyPhone, setCompanyPhone] = useState<string>(s.companyPhone || '+91 98765 43210');
+  const [companyAddress, setCompanyAddress] = useState<string>(s.companyAddress || 'Studio Hub, 4th Floor, Tech Park, Mumbai, India');
 
-  const [shiftStartTime, setShiftStartTime] = useState<string>('09:30');
-  const [shiftEndTime, setShiftEndTime] = useState<string>('18:30');
-  const [lateGraceMinutes, setLateGraceMinutes] = useState<number>(15);
-  const [autoCheckoutHours, setAutoCheckoutHours] = useState<number>(12);
+  const [shiftStartTime, setShiftStartTime] = useState<string>(s.shiftStartTime || '09:30');
+  const [shiftEndTime, setShiftEndTime] = useState<string>(s.shiftEndTime || '18:30');
+  const [lateGraceMinutes, setLateGraceMinutes] = useState<number>(s.lateGraceMinutes ?? 15);
+  const [autoCheckoutHours, setAutoCheckoutHours] = useState<number>(s.autoCheckoutHours ?? 12);
 
-  const [payCycleDay, setPayCycleDay] = useState<number>(1);
-  const [currencySymbol, setCurrencySymbol] = useState<string>('₹');
-  const [maxLoanSalaryPct, setMaxLoanSalaryPct] = useState<number>(25);
-  const [maxLoanTenureMonths, setMaxLoanTenureMonths] = useState<number>(12);
+  const [payCycleDay, setPayCycleDay] = useState<number>(s.payCycleDay ?? 1);
+  const [currencySymbol, setCurrencySymbol] = useState<string>(s.currencySymbol || '₹');
+  const [maxLoanSalaryPct, setMaxLoanSalaryPct] = useState<number>(s.maxLoanSalaryPct ?? 25);
+  const [maxLoanTenureMonths, setMaxLoanTenureMonths] = useState<number>(s.maxLoanTenureMonths ?? 12);
 
-  const [annualCasualLeaves, setAnnualCasualLeaves] = useState<number>(12);
-  const [annualSickLeaves, setAnnualSickLeaves] = useState<number>(12);
-  const [annualEarnedLeaves, setAnnualEarnedLeaves] = useState<number>(15);
-  const [requireSickLeaveAttachmentDays, setRequireSickLeaveAttachmentDays] = useState<number>(2);
+  const [annualCasualLeaves, setAnnualCasualLeaves] = useState<number>(s.annualCasualLeaves ?? 12);
+  const [annualSickLeaves, setAnnualSickLeaves] = useState<number>(s.annualSickLeaves ?? 12);
+  const [annualEarnedLeaves, setAnnualEarnedLeaves] = useState<number>(s.annualEarnedLeaves ?? 15);
+  const [requireSickLeaveAttachmentDays, setRequireSickLeaveAttachmentDays] = useState<number>(s.requireSickLeaveAttachmentDays ?? 2);
 
-  const [allowEmployeeLoanRequests, setAllowEmployeeLoanRequests] = useState<boolean>(true);
-  const [allowSelfCheckin, setAllowSelfCheckin] = useState<boolean>(true);
-  const [emailNotificationsEnabled, setEmailNotificationsEnabled] = useState<boolean>(true);
+  const [allowEmployeeLoanRequests, setAllowEmployeeLoanRequests] = useState<boolean>(s.allowEmployeeLoanRequests !== false);
+  const [allowSelfCheckin, setAllowSelfCheckin] = useState<boolean>(s.allowSelfCheckin !== false);
+  const [emailNotificationsEnabled, setEmailNotificationsEnabled] = useState<boolean>(s.emailNotificationsEnabled !== false);
 
   useEffect(() => {
-    fetchAdminSettings();
-  }, []);
+    if (!initialSettings) {
+      fetchAdminSettings();
+    }
+  }, [initialSettings]);
 
   const fetchAdminSettings = async () => {
     setLoading(true);

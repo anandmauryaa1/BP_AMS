@@ -46,7 +46,38 @@ export class WriteThroughCache {
         const expiresAt = Date.now() + ttlSeconds * 1000;
         // Delete and re-set to preserve insertion/access order for LRU behavior
         this.cache.delete(key);
-        this.cache.set(key, { value, expiresAt });
+        this.cache.set(key, {
+            value,
+            expiresAt,
+            leaseExpiresAt: expiresAt,
+            staleExpiresAt: Date.now() + Math.max(ttlSeconds * 10, 3600) * 1000,
+            isLeased: false,
+            leaseLockedUntil: 0,
+        });
+    }
+
+    /**
+     * Set a value using Lease Caching semantics.
+     * @param {string} key
+     * @param {any} value
+     * @param {number} [leaseDurationSecs=30]
+     * @param {number} [maxStaleSecs=3600]
+     */
+    setLeased(key, value, leaseDurationSecs = 30, maxStaleSecs = 3600) {
+        if (this.cache.size >= this.maxSize && !this.cache.has(key)) {
+            this._evictOldest();
+        }
+
+        const now = Date.now();
+        this.cache.delete(key);
+        this.cache.set(key, {
+            value,
+            expiresAt: now + maxStaleSecs * 1000,
+            leaseExpiresAt: now + leaseDurationSecs * 1000,
+            staleExpiresAt: now + maxStaleSecs * 1000,
+            isLeased: false,
+            leaseLockedUntil: 0,
+        });
     }
 
     /**
@@ -171,6 +202,76 @@ export class WriteThroughCache {
 
         this.inFlightRequests.set(key, fetchPromise);
         return fetchPromise;
+    }
+
+    /**
+     * Lease Caching Strategy (Anti-Stampede / Stale-While-Revalidate with Lease Lock):
+     * - Serves cached data within the lease window (Fresh Hit ~0ms)
+     * - When lease expires, grants a renewal lease lock to exactly ONE worker to refresh asynchronously
+     * - All concurrent callers during lease renewal receive stale cached data immediately (zero latency, zero stampede)
+     * - In the absence of any cached data, performs single-flight execution
+     * 
+     * @template T
+     * @param {string} key
+     * @param {() => Promise<T>} fetcher
+     * @param {Object} [options]
+     * @param {number} [options.leaseDurationSecs=30] Soft expiry window
+     * @param {number} [options.maxStaleSecs=3600] Maximum stale tolerance
+     * @param {number} [options.leaseLockMs=10000] Renewal lock duration
+     * @returns {Promise<T>}
+     */
+    async readLeased(key, fetcher, options = {}) {
+        const leaseDuration = options.leaseDurationSecs || this.defaultTtl || 30;
+        const maxStale = options.maxStaleSecs || 3600;
+        const leaseLockMs = options.leaseLockMs || 10000;
+        const now = Date.now();
+
+        const item = this.cache.get(key);
+
+        // 1. Fresh Lease Hit: Data is within valid lease duration
+        if (item && now < (item.leaseExpiresAt || item.expiresAt)) {
+            this.stats.hits++;
+            return item.value;
+        }
+
+        // 2. Stale Lease Hit: Lease expired, but within max stale window
+        if (item && now < (item.staleExpiresAt || item.expiresAt)) {
+            this.stats.hits++;
+            const isLockActive = item.isLeased && now < item.leaseLockedUntil;
+            if (isLockActive) {
+                // Another worker holds lease lock -> return stale copy immediately without waiting
+                return item.value;
+            }
+
+            // Acquire lease lock for this worker
+            item.isLeased = true;
+            item.leaseLockedUntil = now + leaseLockMs;
+
+            // Background refresh without blocking caller
+            (async () => {
+                try {
+                    const fresh = await fetcher();
+                    if (fresh !== undefined && fresh !== null) {
+                        this.setLeased(key, fresh, leaseDuration, maxStale);
+                    } else {
+                        item.isLeased = false;
+                    }
+                } catch {
+                    item.isLeased = false;
+                }
+            })();
+
+            return item.value;
+        }
+
+        // 3. Cold Cache / Past Max Stale -> Single-flight read-through
+        return this.readThrough(key, async () => {
+            const fresh = await fetcher();
+            if (fresh !== undefined && fresh !== null) {
+                this.setLeased(key, fresh, leaseDuration, maxStale);
+            }
+            return fresh;
+        }, { ttlSeconds: leaseDuration });
     }
 
     /**
@@ -299,6 +400,51 @@ export class WriteThroughCache {
             }
         }
         return count;
+    }
+
+    /**
+     * Get or initialize a Version Mutation Token for a data entity or namespace.
+     * @param {string} namespace
+     * @returns {string}
+     */
+    getVersionToken(namespace = 'default') {
+        if (!this.versionTokens) {
+            this.versionTokens = new Map();
+        }
+        if (!this.versionTokens.has(namespace)) {
+            const token = `tok_${namespace}_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`;
+            this.versionTokens.set(namespace, token);
+        }
+        return this.versionTokens.get(namespace);
+    }
+
+    /**
+     * Rotate and generate a fresh Version Token when data is created, updated, or deleted.
+     * @param {string} namespace
+     * @returns {string}
+     */
+    rotateVersionToken(namespace = 'default') {
+        if (!this.versionTokens) {
+            this.versionTokens = new Map();
+        }
+        const token = `tok_${namespace}_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 7)}`;
+        this.versionTokens.set(namespace, token);
+        this.invalidatePrefix(namespace);
+        return token;
+    }
+
+    /**
+     * Verify if a client/cached token matches the active server version token.
+     * @param {string} namespace
+     * @param {string} token
+     * @returns {boolean}
+     */
+    verifyToken(namespace = 'default', token = '') {
+        if (!token) return false;
+        const current = this.getVersionToken(namespace);
+        const cleanToken = String(token).replace(/^W\//, '').replace(/"/g, '').trim();
+        const cleanCurrent = String(current).replace(/^W\//, '').replace(/"/g, '').trim();
+        return cleanToken === cleanCurrent;
     }
 
     /**

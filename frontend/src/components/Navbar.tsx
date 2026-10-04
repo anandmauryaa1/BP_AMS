@@ -182,7 +182,7 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
     }
   };
 
-  // Sync user prop or fetch session
+  // Sync user prop or fetch consolidated session + initial state
   useEffect(() => {
     if (user && (user.employeeId || user.userId || user.email)) {
       setCurrentUser(user);
@@ -191,7 +191,7 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
       if (user) setCurrentUser(user);
       setIsLoadingSession(true);
       const token = typeof window !== 'undefined' ? (localStorage.getItem('auth_token') || localStorage.getItem('token')) : null;
-      fetch('/api/auth/me', {
+      fetch('/api/auth/initial-state', {
         credentials: 'include',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
@@ -200,6 +200,16 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
           if (data.success && data.data) {
             const userData = data.data.user || data.data;
             setCurrentUser(userData);
+            if (Array.isArray(data.data.notifications)) {
+              setNotifications(data.data.notifications);
+              data.data.notifications.forEach((n: any) => {
+                if (n._id) knownNotificationIdsRef.current.add(String(n._id));
+              });
+            }
+            if (typeof data.data.unreadCount === 'number') {
+              setUnreadCount(data.data.unreadCount);
+            }
+            initialFetchDoneRef.current = true;
           } else if (!user) {
             setCurrentUser(null);
           }

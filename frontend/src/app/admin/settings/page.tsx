@@ -1,3 +1,4 @@
+import { getAdminSettings } from '@/lib/server-api';
 import AdminSettingsClient from './AdminSettingsClient';
 
 export const metadata = {
@@ -5,6 +6,13 @@ export const metadata = {
   description: 'Manage corporate entity, shift timings, payroll rules, leave quotas & portal controls.',
 };
 
-export default function AdminSettingsPage() {
-  return <AdminSettingsClient />;
+export default async function AdminSettingsPage() {
+  const data = await getAdminSettings();
+
+  return (
+    <AdminSettingsClient
+      initialSettings={data.settings}
+      initialUser={data.user}
+    />
+  );
 }

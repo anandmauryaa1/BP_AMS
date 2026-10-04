@@ -30,17 +30,29 @@ interface NotificationItem {
   createdAt: string;
 }
 
-export default function EmployeeNotificationsClient() {
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [unreadCount, setUnreadCount] = useState<number>(0);
-  const [loading, setLoading] = useState<boolean>(true);
+interface EmployeeNotificationsClientProps {
+  initialNotifications?: NotificationItem[];
+  initialUser?: any;
+}
+
+export default function EmployeeNotificationsClient({
+  initialNotifications = [],
+  initialUser = null,
+}: EmployeeNotificationsClientProps) {
+  const [notifications, setNotifications] = useState<NotificationItem[]>(initialNotifications || []);
+  const [unreadCount, setUnreadCount] = useState<number>(() => {
+    return (initialNotifications || []).filter((n: any) => !n.read && !n.isRead).length;
+  });
+  const [loading, setLoading] = useState<boolean>(!initialNotifications || initialNotifications.length === 0);
   const [filter, setFilter] = useState<'ALL' | 'UNREAD'>('ALL');
   const [actionLoading, setActionLoading] = useState<boolean>(false);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
-    fetchMyNotifications();
-  }, []);
+    if (!initialNotifications || initialNotifications.length === 0) {
+      fetchMyNotifications();
+    }
+  }, [initialNotifications]);
 
   const fetchMyNotifications = async () => {
     setLoading(true);

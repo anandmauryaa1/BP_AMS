@@ -149,11 +149,57 @@ const handleEmployeePerformanceSalary = async (req, res) => {
         const monthPrefix = `${targetYear}-${monthStr}`;
         const totalDaysInMonth = new Date(targetYear, targetMonth, 0).getDate();
 
-        // 1. Task Performance
+        const empCodeUpper = empCode ? empCode.toUpperCase() : '';
+        const empQueryOr = [
+            ...(empCodeUpper ? [{ employeeId: empCodeUpper }] : []),
+            ...(empCode ? [{ employeeId: empCode }] : []),
+            ...(empMongoId ? [{ employeeId: empMongoId }, { userId: empMongoId }] : []),
+            ...(stringEmpId ? [{ employeeId: stringEmpId }, { employeeId: stringEmpId.toUpperCase() }] : [])
+        ].filter(Boolean);
+
         const taskQuery = {
             $or: [{ assigneeId: empMongoId }, { assigneeId: empCode }, { employeeId: empCode }],
         };
-        const tasks = await Task.find(taskQuery).lean();
+
+        // Parallel execution of all collection lookups
+        const [
+            tasks,
+            attendanceRecords,
+            leaveRequests,
+            rawStructure,
+            taxDecl,
+            activeLoan,
+            existingRun
+        ] = await Promise.all([
+            Task.find(taskQuery).lean(),
+            Attendance.find({
+                $or: [{ employeeId: empCode }, { employeeId: empMongoId }],
+                date: { $regex: `^${monthPrefix}` },
+            }).lean(),
+            LeaveRequest.find({
+                $or: [{ employeeId: empCode }, { userId: empMongoId }, { user: empMongoId }],
+                status: 'APPROVED',
+            }).lean(),
+            PayrollStructure.findOne({ $or: empQueryOr }).lean(),
+            TaxDeclaration.findOne({
+                $or: [
+                    ...(empCodeUpper ? [{ employeeId: empCodeUpper }] : []),
+                    ...(empCode ? [{ employeeId: empCode }] : []),
+                    ...(empMongoId ? [{ employeeId: empMongoId }, { userId: empMongoId }] : [])
+                ]
+            }).lean(),
+            SalaryLoan.findOne({
+                status: 'ACTIVE',
+                $or: [
+                    ...(empCodeUpper ? [{ employeeId: empCodeUpper }] : []),
+                    ...(empCode ? [{ employeeId: empCode }] : []),
+                    ...(empMongoId ? [{ employeeId: empMongoId }, { userId: empMongoId }] : [])
+                ]
+            }).lean(),
+            PayrollRun.findOne({ month: targetMonth, year: targetYear, employeeId: empCode }).lean()
+        ]);
+
+        // 1. Task Performance Evaluation
         const monthTasks = tasks.filter(t => {
             const taskDate = t.createdAt ? new Date(t.createdAt).toISOString().split('T')[0] : '';
             return taskDate.startsWith(monthPrefix) || t.status === 'IN_PROGRESS';
@@ -173,11 +219,6 @@ const handleEmployeePerformanceSalary = async (req, res) => {
         const performanceScore = Math.max(0, Math.min(100, Math.round(completionRate * 0.7 + (100 - delayRate) * 0.3)));
 
         // 2. Attendance & Leaves Analysis for target month
-        const attendanceRecords = await Attendance.find({
-            $or: [{ employeeId: empCode }, { employeeId: empMongoId }],
-            date: { $regex: `^${monthPrefix}` },
-        }).lean();
-
         let loggedPresentDays = 0;
         for (const att of attendanceRecords) {
             if (['PRESENT', 'COMPLETED', 'ON_BREAK'].includes(att.status)) {
@@ -185,11 +226,6 @@ const handleEmployeePerformanceSalary = async (req, res) => {
             }
         }
         const actualPresentDays = attendanceRecords.length > 0 ? loggedPresentDays : totalDaysInMonth;
-
-        const leaveRequests = await LeaveRequest.find({
-            $or: [{ employeeId: empCode }, { userId: empMongoId }, { user: empMongoId }],
-            status: 'APPROVED',
-        }).lean();
 
         let approvedPaidLeaves = 0;
         let lwpDays = 0;
@@ -216,17 +252,7 @@ const handleEmployeePerformanceSalary = async (req, res) => {
         const paidDaysRatio = effectivePaidDays / totalDaysInMonth;
 
         // 3. Salary & Leave Deduction Calculation
-        const empCodeUpper = empCode ? empCode.toUpperCase() : '';
-        const structureQuery = {
-            $or: [
-                ...(empCodeUpper ? [{ employeeId: empCodeUpper }] : []),
-                ...(empCode ? [{ employeeId: empCode }] : []),
-                ...(empMongoId ? [{ employeeId: empMongoId }, { userId: empMongoId }] : []),
-                ...(stringEmpId ? [{ employeeId: stringEmpId }, { employeeId: stringEmpId.toUpperCase() }] : [])
-            ].filter(Boolean)
-        };
-
-        const structure = await PayrollStructure.findOne(structureQuery).lean() || {
+        const structure = rawStructure || {
             monthlyGross: 50000,
             basic: 25000,
             hra: 12500,
@@ -262,26 +288,10 @@ const handleEmployeePerformanceSalary = async (req, res) => {
         const esicDeduction = isEsicOn ? Math.round(earnedGross * 0.0075) : 0;
         const ptDeduction = (isPtOn && earnedGross > 10000) ? (structure.professionalTax || 200) : 0;
 
-        const taxDecl = await TaxDeclaration.findOne({
-            $or: [
-                ...(empCodeUpper ? [{ employeeId: empCodeUpper }] : []),
-                ...(empCode ? [{ employeeId: empCode }] : []),
-                ...(empMongoId ? [{ employeeId: empMongoId }, { userId: empMongoId }] : [])
-            ]
-        }).lean();
-
         const annualGross = (structure.annualCtc || structure.ctc || (baseMonthlyGross * 12));
         const tdsDeduction = isTdsOn ? calculateMonthlyTds(annualGross, structure.taxRegime || 'NEW', taxDecl || {}) : 0;
 
         let loanEmiDeduction = 0;
-        const activeLoan = await SalaryLoan.findOne({
-            status: 'ACTIVE',
-            $or: [
-                ...(empCodeUpper ? [{ employeeId: empCodeUpper }] : []),
-                ...(empCode ? [{ employeeId: empCode }] : []),
-                ...(empMongoId ? [{ employeeId: empMongoId }, { userId: empMongoId }] : [])
-            ]
-        }).lean();
         if (activeLoan && activeLoan.remainingBalance > 0) {
             loanEmiDeduction = Math.min(activeLoan.monthlyEmi, activeLoan.remainingBalance);
         }
@@ -289,7 +299,6 @@ const handleEmployeePerformanceSalary = async (req, res) => {
         const totalDeductions = lopDeduction + pfDeduction + esicDeduction + ptDeduction + tdsDeduction + loanEmiDeduction;
         const netPayable = Math.max(0, baseMonthlyGross - totalDeductions);
 
-        const existingRun = await PayrollRun.findOne({ month: targetMonth, year: targetYear, employeeId: empCode }).lean();
 
         return res.json({
             success: true,

@@ -29,6 +29,8 @@ import settingsRouter from './routes/settings.js';
 import realtimeRouter from './routes/realtime.js';
 import { User } from './models/User.js';
 import { authenticateToken } from './middleware/auth.js';
+import { tokenValidationMiddleware } from './middleware/cacheControl.js';
+import { cacheManager } from './services/CacheManager.js';
 
 
 
@@ -92,8 +94,32 @@ app.use(async (req, res, next) => {
 app.use('/api/auth/login', authRateLimiter);
 app.use('/api/auth/forgot-password', authRateLimiter);
 app.use('/api/auth/reset-password', authRateLimiter);
+
+// Token-Based Cache Invalidation & Verification Middleware
+app.use('/api', tokenValidationMiddleware());
+
+// Dedicated Cache Token Verification Route
+app.get('/api/cache/verify', (req, res) => {
+    const namespace = req.query.namespace || req.query.key || 'global';
+    const clientToken = req.query.token || req.headers['x-verify-cache-token'] || req.headers['if-none-match'];
+    const currentToken = cacheManager.getVersionToken(namespace);
+    const verified = cacheManager.verifyToken(namespace, clientToken);
+    res.setHeader('X-Cache-Token', currentToken);
+    res.setHeader('ETag', `"${currentToken}"`);
+    return res.json({
+        success: true,
+        verified,
+        token: currentToken,
+        message: verified ? 'Cache token is valid and current' : 'Cache token is stale or invalid; update required',
+    });
+});
+
 // Mount API Routers
 app.use('/api/auth', authRouter);
+app.get('/api/initial-state', (req, res, next) => {
+    req.url = '/initial-state';
+    authRouter(req, res, next);
+});
 app.use('/api/admin', adminRouter);
 app.use('/api/analytics', analyticsRouter);
 app.use('/api/attendance', attendanceRouter);

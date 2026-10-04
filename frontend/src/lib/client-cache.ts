@@ -1,69 +1,147 @@
-/**
- * Client-side response cache using localStorage + memory.
- * Provides near-instant data re-renders between page visits.
- *
- * Usage:
- *   const { data, refresh } = useClientCache('admin-projects', () => fetch('/api/projects').then(r=>r.json()), 60);
- */
+interface ClientCacheEntry<T = any> {
+  data: T;
+  cacheToken?: string;
+  leaseExpiresAt: number;
+  staleExpiresAt: number;
+  isLeased?: boolean;
+  leaseLockedUntil?: number;
+}
 
-const memoryCache: Map<string, { data: any; ts: number }> = new Map();
+const memoryCache: Map<string, ClientCacheEntry> = new Map();
+const inFlightClientRequests: Map<string, Promise<any>> = new Map();
 
-/** Get from memory cache (fastest). */
-function memGet(key: string, ttlMs: number): any | null {
+/** Get from memory cache with Lease Caching semantics. */
+function memGetLeased<T>(key: string): { data: T; cacheToken?: string; isFresh: boolean; isStale: boolean } | null {
   const entry = memoryCache.get(key);
-  if (entry && Date.now() - entry.ts < ttlMs) return entry.data;
+  if (!entry) return null;
+  const now = Date.now();
+  if (now < entry.leaseExpiresAt) {
+    return { data: entry.data, cacheToken: entry.cacheToken, isFresh: true, isStale: false };
+  }
+  if (now < entry.staleExpiresAt) {
+    return { data: entry.data, cacheToken: entry.cacheToken, isFresh: false, isStale: true };
+  }
   return null;
 }
 
-/** Set in memory + localStorage. */
-function memSet(key: string, data: any) {
-  memoryCache.set(key, { data, ts: Date.now() });
+/** Set in memory + localStorage using lease duration and max stale tolerance. */
+function memSetLeased(key: string, data: any, leaseDurationSecs = 30, maxStaleSecs = 3600, cacheToken?: string) {
+  const now = Date.now();
+  const token = cacheToken || (data && (data._cacheToken || data.cacheToken || data.dataVersion)) || undefined;
+  const entry: ClientCacheEntry = {
+    data,
+    cacheToken: token,
+    leaseExpiresAt: now + leaseDurationSecs * 1000,
+    staleExpiresAt: now + maxStaleSecs * 1000,
+    isLeased: false,
+    leaseLockedUntil: 0,
+  };
+  memoryCache.set(key, entry);
   try {
-    localStorage.setItem(`_bpams_cache_${key}`, JSON.stringify({ data, ts: Date.now() }));
+    localStorage.setItem(`_bpams_cache_${key}`, JSON.stringify(entry));
   } catch { /* quota exceeded */ }
 }
 
-/** Get from localStorage (fast, survives page reload). */
-function localGet(key: string, ttlMs: number): any | null {
+/** Get from localStorage (survives page reload). */
+function localGetLeased<T>(key: string): { data: T; cacheToken?: string; isFresh: boolean; isStale: boolean } | null {
   try {
     const raw = localStorage.getItem(`_bpams_cache_${key}`);
     if (!raw) return null;
-    const { data, ts } = JSON.parse(raw);
-    if (Date.now() - ts < ttlMs) return data;
+    const entry: ClientCacheEntry<T> = JSON.parse(raw);
+    const now = Date.now();
+    if (now < (entry.leaseExpiresAt || 0)) {
+      memoryCache.set(key, entry);
+      return { data: entry.data, cacheToken: entry.cacheToken, isFresh: true, isStale: false };
+    }
+    if (now < (entry.staleExpiresAt || 0)) {
+      memoryCache.set(key, entry);
+      return { data: entry.data, cacheToken: entry.cacheToken, isFresh: false, isStale: true };
+    }
   } catch { /* ignore */ }
   return null;
 }
 
 /**
- * Fetch with layered cache: memory → localStorage → network.
- * @param key     cache key
- * @param fetcher async function that returns data
- * @param ttlSecs cache TTL in seconds (default 60)
+ * Fetch with Lease Caching semantics:
+ * - Fresh Lease Hit: Returns cached data (~0ms).
+ * - Stale Lease Hit: Returns cached data immediately and renews lease in background (zero UI waiting).
+ * - Cold Cache: Deduplicates concurrent calls via Single-Flight.
+ * 
+ * @param key               cache key
+ * @param fetcher           async function that returns data
+ * @param leaseDurationSecs soft expiration window in seconds (default 30s)
+ * @param maxStaleSecs      maximum stale tolerance in seconds (default 1 hour)
  */
 export async function cachedFetch<T = any>(
   key: string,
   fetcher: () => Promise<T>,
-  ttlSecs = 60
+  leaseDurationSecs = 30,
+  maxStaleSecs = 3600
 ): Promise<T> {
-  const ttlMs = ttlSecs * 1000;
+  const now = Date.now();
 
-  // 1. Memory (fastest, ~0ms)
-  const mem = memGet(key, ttlMs);
-  if (mem !== null) return mem;
+  // 1. Memory Lease Check (fastest, ~0ms)
+  const mem = memGetLeased<T>(key);
+  if (mem) {
+    if (mem.isFresh) {
+      return mem.data;
+    }
+    // Stale lease: trigger background renewal if lease lock is free
+    const entry = memoryCache.get(key);
+    if (entry && (!entry.isLeased || now > (entry.leaseLockedUntil || 0))) {
+      entry.isLeased = true;
+      entry.leaseLockedUntil = now + 10000;
+      fetcher()
+        .then((fresh) => {
+          if (fresh !== undefined && fresh !== null) {
+            memSetLeased(key, fresh, leaseDurationSecs, maxStaleSecs);
+          } else if (entry) {
+            entry.isLeased = false;
+          }
+        })
+        .catch(() => {
+          if (entry) entry.isLeased = false;
+        });
+    }
+    return mem.data;
+  }
 
-  // 2. localStorage (fast, ~1-2ms)
+  // 2. LocalStorage Lease Check (~1-2ms)
   if (typeof window !== 'undefined') {
-    const local = localGet(key, ttlMs);
-    if (local !== null) {
-      memoryCache.set(key, { data: local, ts: Date.now() });
-      return local;
+    const local = localGetLeased<T>(key);
+    if (local) {
+      if (local.isFresh) {
+        return local.data;
+      }
+      // Stale lease: trigger background renewal
+      fetcher()
+        .then((fresh) => {
+          if (fresh !== undefined && fresh !== null) {
+            memSetLeased(key, fresh, leaseDurationSecs, maxStaleSecs);
+          }
+        })
+        .catch(() => {});
+      return local.data;
     }
   }
 
-  // 3. Network (slow, full fetch)
-  const data = await fetcher();
-  memSet(key, data);
-  return data;
+  // 3. Cold Cache Miss: Single-flight network fetch
+  if (inFlightClientRequests.has(key)) {
+    return inFlightClientRequests.get(key)!;
+  }
+
+  const promise = (async () => {
+    try {
+      const fresh = await fetcher();
+      memSetLeased(key, fresh, leaseDurationSecs, maxStaleSecs);
+      return fresh;
+    } finally {
+      inFlightClientRequests.delete(key);
+    }
+  })();
+
+  inFlightClientRequests.set(key, promise);
+  return promise;
 }
 
 /** Invalidate a cache key (force refetch on next call). */

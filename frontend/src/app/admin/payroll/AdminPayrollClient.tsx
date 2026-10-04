@@ -73,15 +73,25 @@ interface SalaryLoan {
   createdAt: string;
 }
 
-export default function AdminPayrollClient() {
+interface AdminPayrollClientProps {
+  initialEmployees?: Employee[];
+  initialLoans?: SalaryLoan[];
+  initialUser?: any;
+}
+
+export default function AdminPayrollClient({
+  initialEmployees = [],
+  initialLoans = [],
+  initialUser = null,
+}: AdminPayrollClientProps) {
   const [activeTab, setActiveTab] = useState<'runs' | 'exports' | 'loans' | 'structures'>('runs');
-  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>(initialEmployees || []);
   const [month, setMonth] = useState<number>(new Date().getMonth() + 1);
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [loading, setLoading] = useState<boolean>(false);
   const [payrollRecords, setPayrollRecords] = useState<PayrollRunRecord[]>([]);
   const [payrollSummary, setPayrollSummary] = useState<any>(null);
-  const [loans, setLoans] = useState<SalaryLoan[]>([]);
+  const [loans, setLoans] = useState<SalaryLoan[]>(initialLoans || []);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Form states for New Loan
@@ -157,8 +167,10 @@ export default function AdminPayrollClient() {
   };
 
   useEffect(() => {
-    fetchInitialData();
-  }, []);
+    if (initialEmployees.length === 0) {
+      fetchInitialData();
+    }
+  }, [initialEmployees]);
 
   const fetchInitialData = async () => {
     try {

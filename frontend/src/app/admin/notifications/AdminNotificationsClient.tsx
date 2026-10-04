@@ -34,18 +34,30 @@ interface NotificationItem {
   createdAt: string;
 }
 
-export default function AdminNotificationsClient() {
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [unreadCount, setUnreadCount] = useState<number>(0);
-  const [loading, setLoading] = useState<boolean>(true);
+interface AdminNotificationsClientProps {
+  initialNotifications?: NotificationItem[];
+  initialUser?: any;
+}
+
+export default function AdminNotificationsClient({
+  initialNotifications = [],
+  initialUser = null,
+}: AdminNotificationsClientProps) {
+  const [notifications, setNotifications] = useState<NotificationItem[]>(initialNotifications || []);
+  const [unreadCount, setUnreadCount] = useState<number>(() => {
+    return (initialNotifications || []).filter((n: any) => !n.read && !n.isRead).length;
+  });
+  const [loading, setLoading] = useState<boolean>(!initialNotifications || initialNotifications.length === 0);
   const [filter, setFilter] = useState<'ALL' | 'UNREAD' | 'LEAVE' | 'TASK' | 'SYSTEM'>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [actionLoading, setActionLoading] = useState<boolean>(false);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
-    fetchNotifications();
-  }, []);
+    if (!initialNotifications || initialNotifications.length === 0) {
+      fetchNotifications();
+    }
+  }, [initialNotifications]);
 
   const fetchNotifications = async () => {
     setLoading(true);

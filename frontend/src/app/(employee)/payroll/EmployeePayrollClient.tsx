@@ -18,20 +18,34 @@ import {
 import { EmployeePerformanceSalaryCard } from '@/components/analytics/EmployeePerformanceSalaryCard';
 import { apiFetch } from '@/lib/api';
 
-export default function EmployeePayrollClient() {
+interface EmployeePayrollClientProps {
+  initialStructure?: any;
+  initialDeclaration?: any;
+  initialPayslips?: any[];
+  initialLoans?: any[];
+  initialUser?: any;
+}
+
+export default function EmployeePayrollClient({
+  initialStructure = null,
+  initialDeclaration = null,
+  initialPayslips = [],
+  initialLoans = [],
+  initialUser = null,
+}: EmployeePayrollClientProps) {
   const [activeTab, setActiveTab] = useState<'live-estimate' | 'structure' | 'declaration' | 'payslips' | 'loan'>('live-estimate');
-  const [structure, setStructure] = useState<any>(null);
-  const [declaration, setDeclaration] = useState<any>(null);
-  const [payslips, setPayslips] = useState<any[]>([]);
-  const [loans, setLoans] = useState<any[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [structure, setStructure] = useState<any>(initialStructure);
+  const [declaration, setDeclaration] = useState<any>(initialDeclaration);
+  const [payslips, setPayslips] = useState<any[]>(initialPayslips || []);
+  const [loans, setLoans] = useState<any[]>(initialLoans || []);
+  const [loading, setLoading] = useState<boolean>(!initialStructure && !initialDeclaration);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Form states for IT Declaration
-  const [regime, setRegime] = useState<'NEW' | 'OLD' | 'NONE' | 'NA'>('NEW');
-  const [section80C, setSection80C] = useState<number>(150000);
-  const [section80D, setSection80D] = useState<number>(25000);
-  const [annualRent, setAnnualRent] = useState<number>(120000);
+  const [regime, setRegime] = useState<'NEW' | 'OLD' | 'NONE' | 'NA'>(initialDeclaration?.regime || 'NEW');
+  const [section80C, setSection80C] = useState<number>(initialDeclaration?.section80C ?? 150000);
+  const [section80D, setSection80D] = useState<number>(initialDeclaration?.section80D ?? 25000);
+  const [annualRent, setAnnualRent] = useState<number>(initialDeclaration?.annualRentPaid ?? 120000);
 
   // Form states for Loan request
   const [showLoanModal, setShowLoanModal] = useState<boolean>(false);
@@ -40,8 +54,10 @@ export default function EmployeePayrollClient() {
   const [reqReason, setReqReason] = useState<string>('Personal Emergency Advance');
 
   useEffect(() => {
-    fetchMyPayrollData();
-  }, []);
+    if (!initialStructure && !initialDeclaration) {
+      fetchMyPayrollData();
+    }
+  }, [initialStructure, initialDeclaration]);
 
   const fetchMyPayrollData = async () => {
     setLoading(true);
