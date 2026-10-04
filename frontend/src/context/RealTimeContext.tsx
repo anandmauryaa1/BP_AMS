@@ -176,7 +176,25 @@ export const RealTimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
     };
 
-    connectSSE();
+    const scheduleConnect = () => {
+      if (typeof window === 'undefined') return;
+
+      // Defer SSE stream connection until after critical path / LCP render
+      if ('requestIdleCallback' in window) {
+        (window as any).requestIdleCallback(
+          () => {
+            if (!isUnmounted) connectSSE();
+          },
+          { timeout: 2500 }
+        );
+      } else {
+        setTimeout(() => {
+          if (!isUnmounted) connectSSE();
+        }, 1200);
+      }
+    };
+
+    scheduleConnect();
 
     return () => {
       isUnmounted = true;

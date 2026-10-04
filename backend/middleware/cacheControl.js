@@ -4,12 +4,11 @@
 import { cacheManager } from '../services/CacheManager.js';
 
 /**
- * Disables caching for sensitive/mutation routes.
+ * Configures sensitive/mutation routes to prevent intermediate caching while enabling Back/Forward Cache (bfcache).
  */
 export function noCache(req, res, next) {
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Cache-Control', 'private, no-cache, must-revalidate, max-age=0');
     res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
     next();
 }
 

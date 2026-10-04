@@ -34,14 +34,19 @@ import {
   Layers,
   Settings,
 } from 'lucide-react';
+import dynamic from 'next/dynamic';
 import { SessionPayload } from '@/types';
 import { Badge } from '@/components/ui/Badge';
-import { PushNotificationManager } from '@/components/PushNotificationManager';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { ADMIN_NAV_CATEGORIES } from '@/components/AdminNav';
 import { soundService } from '@/lib/audioSound';
 import { cn } from '@/lib/utils';
 import { useRealTimeEvent } from '@/context/RealTimeContext';
+
+const PushNotificationManager = dynamic(
+  () => import('@/components/PushNotificationManager').then((mod) => mod.PushNotificationManager),
+  { ssr: false }
+);
 
 interface ToastNotification {
   id: string;

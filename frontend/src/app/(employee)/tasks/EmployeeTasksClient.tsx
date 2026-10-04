@@ -27,10 +27,11 @@ import { soundService } from '@/lib/audioSound';
 
 export default function EmployeeTasksClient({ initialTasks = [] }: { initialTasks?: any[] }) {
   const [user, setUser] = useState<SessionPayload | null>(null);
-  const [tasks, setTasks] = useState<ITask[]>([]);
+  const [tasks, setTasks] = useState<ITask[]>(initialTasks);
   const [activeTab, setActiveTab] = useState<'MY_TASKS' | 'UNASSIGNED'>('MY_TASKS');
   const [statusFilter, setStatusFilter] = useState('ALL');
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(initialTasks.length === 0);
+  const isInitialMount = React.useRef(true);
   const [editingTask, setEditingTask] = useState<ITask | null>(null);
   const [taskStatus, setTaskStatus] = useState<TaskStatus>('TODO');
   const [taskNotes, setTaskNotes] = useState('');
@@ -44,13 +45,9 @@ export default function EmployeeTasksClient({ initialTasks = [] }: { initialTask
     setTimeout(() => setToastMessage(null), 4000);
   };
 
-  const fetchTasks = useCallback(async () => {
-    setIsLoading(true);
+  const fetchTasks = useCallback(async (showLoading = true) => {
+    if (showLoading) setIsLoading(true);
     try {
-      const meRes = await fetch('/api/auth/me');
-      const meData = await meRes.json();
-      if (meData.success) setUser(meData.data);
-
       let url = activeTab === 'MY_TASKS' ? '/api/tasks?myTasks=true' : '/api/tasks?assignedTo=unassigned';
       if (statusFilter !== 'ALL') url += `&status=${statusFilter}`;
 
@@ -68,7 +65,24 @@ export default function EmployeeTasksClient({ initialTasks = [] }: { initialTask
   }, [statusFilter, activeTab]);
 
   useEffect(() => {
-    fetchTasks();
+    // Load current user profile in background
+    fetch('/api/auth/me')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) setUser(data.data);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      // If we already have SSR initial tasks and standard tab/filter, skip redundant initial client fetch
+      if (initialTasks.length > 0 && activeTab === 'MY_TASKS' && statusFilter === 'ALL') {
+        return;
+      }
+    }
+    fetchTasks(tasks.length === 0);
   }, [fetchTasks]);
 
   // Real-time synchronization
