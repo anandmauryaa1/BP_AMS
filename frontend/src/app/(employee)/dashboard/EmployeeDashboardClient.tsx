@@ -483,6 +483,21 @@ export default function EmployeeDashboardClient({
                 <div className="text-base font-bold text-slate-800 dark:text-slate-100 mt-1 font-mono">
                   {formatTime(attendance?.checkIn)}
                 </div>
+                {attendance?.checkIn && (attendance.isLate || (attendance.lateMinutes && attendance.lateMinutes > 0)) ? (
+                  <div className="flex items-center gap-1 mt-1 font-sans">
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 font-bold text-[10px] border border-amber-300 dark:border-amber-800/60">
+                      <Clock className="w-2.5 h-2.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                      {attendance.lateMinutes}m Late
+                    </span>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500" title="Scheduled Shift Start">
+                      ({attendance.scheduledShiftStart || '09:30'})
+                    </span>
+                  </div>
+                ) : attendance?.checkIn ? (
+                  <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-0.5 mt-1 font-sans">
+                    <Check className="w-2.5 h-2.5" /> On-Time
+                  </div>
+                ) : null}
               </div>
 
               <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 rounded-xl p-3.5">

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   calculateTotalBreakMinutes,
   calculateWorkingMinutes,
+  calculateLateCheckIn,
 } from '../src/lib/services/attendance';
 import { getTodayDateString, formatMinutes } from '../src/lib/utils';
 import { IBreak } from '../src/types';
@@ -77,5 +78,21 @@ describe('Attendance State Machine & Duration Calculations', () => {
 
     const workedMinutes = calculateWorkingMinutes(checkIn, checkOut, totalBreakMinutes);
     expect(workedMinutes).toBe(0);
+  });
+
+  it('should track late check-in when checkIn exceeds shift start and grace period', () => {
+    const onTimePunch = new Date(2026, 9, 9, 9, 20, 0); // 09:20
+    const onTimeResult = calculateLateCheckIn(onTimePunch, '09:30', 15);
+    expect(onTimeResult.isLate).toBe(false);
+    expect(onTimeResult.lateMinutes).toBe(0);
+
+    const gracePunch = new Date(2026, 9, 9, 9, 44, 0); // 09:44 (within 15m grace)
+    const graceResult = calculateLateCheckIn(gracePunch, '09:30', 15);
+    expect(graceResult.isLate).toBe(false);
+
+    const latePunch = new Date(2026, 9, 9, 10, 5, 0); // 10:05 (35 mins late)
+    const lateResult = calculateLateCheckIn(latePunch, '09:30', 15);
+    expect(lateResult.isLate).toBe(true);
+    expect(lateResult.lateMinutes).toBe(35);
   });
 });

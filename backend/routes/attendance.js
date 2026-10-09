@@ -194,6 +194,8 @@ const handleMonthlyOrHistory = async (req, res) => {
         let totalBreakMinutes = 0;
         let presentDays = 0;
         let completedDays = 0;
+        let lateDays = 0;
+        let totalLateMinutes = 0;
 
         records.forEach((r) => {
             totalWorkingMinutes += (r.totalWorkingMinutes || 0);
@@ -204,12 +206,18 @@ const handleMonthlyOrHistory = async (req, res) => {
             if (r.status === 'COMPLETED') {
                 completedDays++;
             }
+            if (r.isLate || (r.lateMinutes && r.lateMinutes > 0)) {
+                lateDays++;
+                totalLateMinutes += (r.lateMinutes || 0);
+            }
         });
 
         const summary = {
             totalDays: records.length,
             presentDays,
             completedDays,
+            lateDays,
+            totalLateMinutes,
             totalWorkingMinutes,
             totalBreakMinutes,
         };

@@ -151,6 +151,10 @@ export interface IAttendance {
   breaks: IBreak[];
   totalWorkingMinutes: number;
   totalBreakMinutes: number;
+  isLate?: boolean;
+  lateMinutes?: number;
+  scheduledShiftStart?: string;
+  lateGraceMinutes?: number;
   correction?: IAttendanceCorrection;
   createdAt: Date;
   updatedAt: Date;

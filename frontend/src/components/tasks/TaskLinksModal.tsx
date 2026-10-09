@@ -12,8 +12,6 @@ import {
   HardDrive,
   FileText,
   Video,
-  Figma,
-  Github,
   Globe,
   AlertCircle,
   Save,
@@ -39,8 +37,6 @@ const PRESET_CHIPS = [
   { label: 'Google Drive', prefix: 'Drive', icon: HardDrive },
   { label: 'Script / Doc', prefix: 'Script Doc', icon: FileText },
   { label: 'Final Output', prefix: 'Export 4K', icon: Video },
-  { label: 'Figma UI', prefix: 'Figma Design', icon: Figma },
-  { label: 'GitHub Repo', prefix: 'Code Repo', icon: Github },
 ];
 
 export default function TaskLinksModal({
@@ -212,7 +208,7 @@ export default function TaskLinksModal({
               <Globe className="w-8 h-8 mx-auto mb-2 opacity-30 text-slate-400" />
               <p className="font-medium">No links added to this task yet.</p>
               <p className="text-[11px] text-slate-400 dark:text-zinc-600 mt-0.5">
-                Add Google Drive exports, scripts, Figma files, or deliverable URLs below.
+                Add Google Drive exports, scripts, or final video deliverable URLs below.
               </p>
             </div>
           ) : (

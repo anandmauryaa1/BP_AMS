@@ -19,6 +19,9 @@ import {
   Edit,
   Filter,
   Check,
+  Clock,
+  Users,
+  Timer,
 } from 'lucide-react';
 import { AttendanceStatus, IAttendance } from '@/types';
 
@@ -31,6 +34,7 @@ export default function AdminAttendanceClient({ initialRecords = [] }: Props) {
   const [dateFilter, setDateFilter] = useState<string>(getTodayDateString());
   const [departmentFilter, setDepartmentFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [punctualityFilter, setPunctualityFilter] = useState<'ALL' | 'LATE' | 'ON_TIME'>('ALL');
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(initialRecords.length === 0);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
@@ -61,6 +65,7 @@ export default function AdminAttendanceClient({ initialRecords = [] }: Props) {
       if (dateFilter) url += `&date=${dateFilter}`;
       if (departmentFilter !== 'ALL') url += `&department=${departmentFilter}`;
       if (statusFilter !== 'ALL') url += `&status=${statusFilter}`;
+      if (punctualityFilter !== 'ALL') url += `&punctuality=${punctualityFilter}`;
       if (search) url += `&employeeId=${encodeURIComponent(search)}`;
 
       const res = await fetch(url);
@@ -73,7 +78,7 @@ export default function AdminAttendanceClient({ initialRecords = [] }: Props) {
     } finally {
       setIsLoading(false);
     }
-  }, [dateFilter, departmentFilter, statusFilter, search]);
+  }, [dateFilter, departmentFilter, statusFilter, punctualityFilter, search]);
 
   useEffect(() => {
     fetchRecords();
@@ -200,12 +205,72 @@ export default function AdminAttendanceClient({ initialRecords = [] }: Props) {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
-              Attendance Management
+              Attendance Management & Late Tracking
             </h1>
             <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
-              Review records, process employee correction requests, and apply manual adjustments.
+              Review real-time shifts, track late check-in records, process corrections, and manage attendance audits.
             </p>
           </div>
+        </div>
+
+        {/* Attendance & Punctuality KPI Quick Stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 mb-6">
+          <Card className="p-4 border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70">
+            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide flex items-center gap-1.5">
+              <Users className="w-3.5 h-3.5 text-slate-400" />
+              Total Employees
+            </span>
+            <div className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
+              {records.length}
+            </div>
+          </Card>
+
+          <Card className="p-4 border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70">
+            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide flex items-center gap-1.5">
+              <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
+              Present Today
+            </span>
+            <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-400 mt-1">
+              {records.filter((r) => ['PRESENT', 'ON_BREAK', 'COMPLETED'].includes(r.status)).length}
+            </div>
+          </Card>
+
+          <Card
+            onClick={() => setPunctualityFilter((prev) => (prev === 'LATE' ? 'ALL' : 'LATE'))}
+            className={`p-4 border cursor-pointer transition-all hover:scale-[1.01] ${
+              punctualityFilter === 'LATE'
+                ? 'border-amber-400 dark:border-amber-600 bg-amber-50 dark:bg-amber-950/40 ring-2 ring-amber-400/40'
+                : 'border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-amber-500" />
+                Late Check-ins
+              </span>
+              {punctualityFilter === 'LATE' && (
+                <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-200/70 dark:bg-amber-800/60 px-1.5 py-0.5 rounded">
+                  Filtered
+                </span>
+              )}
+            </div>
+            <div className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1 flex items-baseline gap-2">
+              {records.filter((r) => r.isLate || (r.lateMinutes && r.lateMinutes > 0)).length}
+              <span className="text-xs font-normal text-slate-400 dark:text-slate-500">
+                ({punctualityFilter === 'LATE' ? 'click to reset' : 'click to filter'})
+              </span>
+            </div>
+          </Card>
+
+          <Card className="p-4 border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70">
+            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide flex items-center gap-1.5">
+              <XCircle className="w-3.5 h-3.5 text-rose-500" />
+              Absent / Not In
+            </span>
+            <div className="text-2xl font-bold text-rose-600 dark:text-rose-400 mt-1">
+              {records.filter((r) => r.status === 'NOT_CHECKED_IN' || r.status === 'ABSENT').length}
+            </div>
+          </Card>
         </div>
 
         {/* Pending Corrections Alert Section */}
@@ -262,7 +327,7 @@ export default function AdminAttendanceClient({ initialRecords = [] }: Props) {
 
         {/* Filters Bar */}
         <Card className="border-slate-200 dark:border-slate-800 mb-6 p-4">
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
             <div>
               <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
                 Filter Date
@@ -312,6 +377,21 @@ export default function AdminAttendanceClient({ initialRecords = [] }: Props) {
 
             <div>
               <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
+                Punctuality / Shift
+              </label>
+              <select
+                value={punctualityFilter}
+                onChange={(e) => setPunctualityFilter(e.target.value as any)}
+                className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-200 font-medium focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-rose-500"
+              >
+                <option value="ALL">All Punctuality</option>
+                <option value="LATE">⏰ Late Check-ins Only</option>
+                <option value="ON_TIME">✓ On-Time Check-ins Only</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
                 Employee Search
               </label>
               <input
@@ -335,7 +415,7 @@ export default function AdminAttendanceClient({ initialRecords = [] }: Props) {
                   <th className="py-3 px-4">Employee</th>
                   <th className="py-3 px-4">Department</th>
                   <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4">Check In</th>
+                  <th className="py-3 px-4">Check In & Shift</th>
                   <th className="py-3 px-4">Check Out</th>
                   <th className="py-3 px-4">Working Time</th>
                   <th className="py-3 px-4">Break Time</th>
@@ -388,13 +468,28 @@ export default function AdminAttendanceClient({ initialRecords = [] }: Props) {
                         )}
                       </td>
                       <td className="py-3 px-4 font-mono text-slate-700 dark:text-slate-300">
-                        <div>{formatTime(rec.checkIn)}</div>
+                        <div className="font-semibold">{formatTime(rec.checkIn)}</div>
+                        {rec.checkIn && (rec.isLate || (rec.lateMinutes && rec.lateMinutes > 0)) ? (
+                          <div className="flex items-center gap-1.5 mt-1 font-sans">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 font-bold text-[10px] border border-amber-300 dark:border-amber-800/60">
+                              <Clock className="w-2.5 h-2.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                              {rec.lateMinutes}m Late
+                            </span>
+                            <span className="text-[10px] text-slate-400 dark:text-slate-500" title="Scheduled Shift Start">
+                              ({rec.scheduledShiftStart || '09:30'})
+                            </span>
+                          </div>
+                        ) : rec.checkIn ? (
+                          <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-0.5 mt-0.5 font-sans">
+                            <Check className="w-2.5 h-2.5" /> On-Time
+                          </div>
+                        ) : null}
                         {rec.checkInLocation && (
                           <a
                             href={`https://www.google.com/maps?q=${rec.checkInLocation.latitude},${rec.checkInLocation.longitude}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-[10px] text-rose-600 dark:text-rose-400 hover:underline flex items-center gap-0.5 mt-0.5"
+                            className="text-[10px] text-rose-600 dark:text-rose-400 hover:underline flex items-center gap-0.5 mt-0.5 font-sans"
                           >
                             GPS ({rec.checkInLocation.latitude.toFixed(2)}, {rec.checkInLocation.longitude.toFixed(2)})
                           </a>
@@ -407,7 +502,7 @@ export default function AdminAttendanceClient({ initialRecords = [] }: Props) {
                             href={`https://www.google.com/maps?q=${rec.checkOutLocation.latitude},${rec.checkOutLocation.longitude}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-[10px] text-rose-600 dark:text-rose-400 hover:underline flex items-center gap-0.5 mt-0.5"
+                            className="text-[10px] text-rose-600 dark:text-rose-400 hover:underline flex items-center gap-0.5 mt-0.5 font-sans"
                           >
                             GPS ({rec.checkOutLocation.latitude.toFixed(2)}, {rec.checkOutLocation.longitude.toFixed(2)})
                           </a>

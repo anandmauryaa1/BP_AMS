@@ -10,6 +10,7 @@ import { Deliverable } from '../models/Deliverable.js';
 import { authenticateToken, requireManagerOrAdmin, hashPassword } from '../middleware/auth.js';
 import { logAuditEvent } from '../services/audit.js';
 import { sendEmail, sendWelcomeEmail, sendAdminPasswordResetEmail } from '../services/email.js';
+import { calculateLateCheckIn, getEmployeeShiftConfig } from '../services/attendance.js';
 import { getTodayDateString } from '../utils/index.js';
 const router = Router();
 const CreateEmployeeSchema = z.object({
@@ -314,7 +315,6 @@ router.get('/reports', async (req, res) => {
         const startDate = req.query.startDate || todayStr;
         const endDate = req.query.endDate || todayStr;
 
-        // 1. Staff Attendance live metrics
         const totalEmployees = await User.countDocuments({ status: 'ACTIVE' });
         const todayAttendances = await Attendance.find({ date: todayStr }).lean();
         const currentlyWorking = todayAttendances.filter(a => a.status === 'PRESENT').length;
@@ -322,12 +322,14 @@ router.get('/reports', async (req, res) => {
         const completedAttendance = todayAttendances.filter(a => a.status === 'COMPLETED').length;
         const presentToday = currentlyWorking + currentlyOnBreak + completedAttendance;
         const absentToday = Math.max(0, totalEmployees - presentToday);
+        const lateToday = todayAttendances.filter(a => a.isLate || (a.lateMinutes && a.lateMinutes > 0)).length;
         const pendingCorrectionsCount = await Attendance.countDocuments({ 'correction.status': 'PENDING' });
 
         const dashboardMetrics = {
             totalEmployees,
             presentToday,
             absentToday,
+            lateToday,
             currentlyWorking,
             currentlyOnBreak,
             completedAttendance,
@@ -421,6 +423,10 @@ router.get('/reports', async (req, res) => {
                 checkOut: att.checkOut,
                 totalWorkingMinutes: mins,
                 totalBreakMinutes: att.totalBreakMinutes || 0,
+                isLate: Boolean(att.isLate || (att.lateMinutes && att.lateMinutes > 0)),
+                lateMinutes: att.lateMinutes || 0,
+                scheduledShiftStart: att.scheduledShiftStart || '09:30',
+                lateGraceMinutes: att.lateGraceMinutes || 15,
             });
         }
         const departmentBreakdown = Object.entries(deptMap).map(([department, totalMinutes]) => ({
@@ -455,6 +461,7 @@ router.get('/attendance', async (req, res) => {
         const date = req.query.date || getTodayDateString();
         const department = req.query.department;
         const status = req.query.status;
+        const punctuality = req.query.punctuality; // 'ALL' | 'LATE' | 'ON_TIME'
         const employeeId = req.query.employeeId;
         const limit = parseInt(req.query.limit || '100', 10);
         const page = parseInt(req.query.page || '1', 10);
@@ -496,6 +503,10 @@ router.get('/attendance', async (req, res) => {
                     checkOut: att.checkOut,
                     totalWorkingMinutes: att.totalWorkingMinutes || 0,
                     totalBreakMinutes: att.totalBreakMinutes || 0,
+                    isLate: Boolean(att.isLate || (att.lateMinutes && att.lateMinutes > 0)),
+                    lateMinutes: att.lateMinutes || 0,
+                    scheduledShiftStart: att.scheduledShiftStart || '09:30',
+                    lateGraceMinutes: att.lateGraceMinutes || 15,
                     correction: att.correction,
                     breaks: att.breaks || [],
                     sessions: att.sessions || [],
@@ -513,6 +524,10 @@ router.get('/attendance', async (req, res) => {
                 checkOut: null,
                 totalWorkingMinutes: 0,
                 totalBreakMinutes: 0,
+                isLate: false,
+                lateMinutes: 0,
+                scheduledShiftStart: '09:30',
+                lateGraceMinutes: 15,
                 correction: null,
                 breaks: [],
                 sessions: [],
@@ -521,6 +536,12 @@ router.get('/attendance', async (req, res) => {
 
         if (status && status !== 'ALL') {
             records = records.filter((r) => r.status === status);
+        }
+
+        if (punctuality === 'LATE' || req.query.isLate === 'true') {
+            records = records.filter((r) => r.isLate || (r.lateMinutes && r.lateMinutes > 0));
+        } else if (punctuality === 'ON_TIME') {
+            records = records.filter((r) => r.status !== 'NOT_CHECKED_IN' && !r.isLate && (!r.lateMinutes || r.lateMinutes === 0));
         }
 
         const totalRecords = records.length;
@@ -557,19 +578,39 @@ router.patch('/attendance', async (req, res) => {
             const user = await User.findById(attendanceId).lean();
             if (user) {
                 const todayStr = getTodayDateString();
+                const checkInDate = checkIn ? new Date(checkIn) : new Date();
+                const shiftCfg = await getEmployeeShiftConfig(user.employeeId, todayStr);
+                const lateCalc = calculateLateCheckIn(checkInDate, shiftCfg.shiftStartTime, shiftCfg.graceMinutes);
                 record = await Attendance.create({
                     employeeId: user.employeeId,
                     date: todayStr,
                     status: status || 'PRESENT',
-                    checkIn: checkIn ? new Date(checkIn) : new Date(),
+                    checkIn: checkInDate,
                     checkOut: checkOut ? new Date(checkOut) : null,
+                    isLate: lateCalc.isLate,
+                    lateMinutes: lateCalc.lateMinutes,
+                    scheduledShiftStart: lateCalc.scheduledShiftStart,
+                    lateGraceMinutes: lateCalc.lateGraceMinutes,
                 });
             } else {
                 return res.status(404).json({ success: false, error: 'Attendance record not found' });
             }
         } else {
             if (status) record.status = status;
-            if (checkIn !== undefined) record.checkIn = checkIn ? new Date(checkIn) : null;
+            if (checkIn !== undefined) {
+                record.checkIn = checkIn ? new Date(checkIn) : null;
+                if (record.checkIn) {
+                    const shiftCfg = await getEmployeeShiftConfig(record.employeeId, record.date);
+                    const lateCalc = calculateLateCheckIn(record.checkIn, shiftCfg.shiftStartTime, shiftCfg.graceMinutes);
+                    record.isLate = lateCalc.isLate;
+                    record.lateMinutes = lateCalc.lateMinutes;
+                    record.scheduledShiftStart = lateCalc.scheduledShiftStart;
+                    record.lateGraceMinutes = lateCalc.lateGraceMinutes;
+                } else {
+                    record.isLate = false;
+                    record.lateMinutes = 0;
+                }
+            }
             if (checkOut !== undefined) record.checkOut = checkOut ? new Date(checkOut) : null;
             if (record.checkIn && record.checkOut) {
                 const diffMs = record.checkOut.getTime() - record.checkIn.getTime();
@@ -614,6 +655,12 @@ router.patch('/attendance/correction/:id', async (req, res) => {
         if (decision === 'APPROVE') {
             if (record.correction.requestedCheckIn) {
                 record.checkIn = record.correction.requestedCheckIn;
+                const shiftCfg = await getEmployeeShiftConfig(record.employeeId, record.date);
+                const lateCalc = calculateLateCheckIn(record.checkIn, shiftCfg.shiftStartTime, shiftCfg.graceMinutes);
+                record.isLate = lateCalc.isLate;
+                record.lateMinutes = lateCalc.lateMinutes;
+                record.scheduledShiftStart = lateCalc.scheduledShiftStart;
+                record.lateGraceMinutes = lateCalc.lateGraceMinutes;
             }
             if (record.correction.requestedCheckOut) {
                 record.checkOut = record.correction.requestedCheckOut;

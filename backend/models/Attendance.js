@@ -52,6 +52,10 @@ const AttendanceSchema = new Schema({
     breaks: [BreakSchema],
     totalWorkingMinutes: { type: Number, default: 0 },
     totalBreakMinutes: { type: Number, default: 0 },
+    isLate: { type: Boolean, default: false },
+    lateMinutes: { type: Number, default: 0 },
+    scheduledShiftStart: { type: String, default: '09:30' },
+    lateGraceMinutes: { type: Number, default: 15 },
     correction: CorrectionSchema,
 }, {
     timestamps: true,
@@ -62,6 +66,8 @@ const AttendanceSchema = new Schema({
 AttendanceSchema.index({ employeeId: 1, date: 1 }, { unique: true });
 // 2. ESR Rule: Equality (status, employeeId), Sort/Range (date DESC)
 AttendanceSchema.index({ status: 1, employeeId: 1, date: -1 });
+// 3. Late Check-in query index: (date [E/S], isLate [E])
+AttendanceSchema.index({ date: 1, isLate: 1 });
 
 export const Attendance = mongoose.models.Attendance || mongoose.model('Attendance', AttendanceSchema);
 

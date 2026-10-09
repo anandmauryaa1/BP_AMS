@@ -29,3 +29,52 @@ export function calculateWorkingMinutes(
   const totalElapsedMinutes = Math.floor((endMs - startMs) / (1000 * 60));
   return Math.max(0, totalElapsedMinutes - totalBreakMinutes);
 }
+
+export function calculateLateCheckIn(
+  checkInTime: Date = new Date(),
+  shiftStartTime: string = '09:30',
+  graceMinutes: number = 15
+): {
+  isLate: boolean;
+  lateMinutes: number;
+  scheduledShiftStart: string;
+  lateGraceMinutes: number;
+} {
+  const checkInDate = new Date(checkInTime);
+  const [hoursStr, minutesStr] = (shiftStartTime || '09:30').split(':');
+  const shiftHours = parseInt(hoursStr, 10) || 0;
+  const shiftMins = parseInt(minutesStr, 10) || 0;
+
+  const scheduledStart = new Date(
+    checkInDate.getFullYear(),
+    checkInDate.getMonth(),
+    checkInDate.getDate(),
+    shiftHours,
+    shiftMins,
+    0,
+    0
+  );
+
+  const graceMs = (Number(graceMinutes) || 0) * 60 * 1000;
+  const graceDeadline = new Date(scheduledStart.getTime() + graceMs);
+
+  if (checkInDate.getTime() > graceDeadline.getTime()) {
+    const lateMinutes = Math.max(
+      0,
+      Math.floor((checkInDate.getTime() - scheduledStart.getTime()) / (1000 * 60))
+    );
+    return {
+      isLate: true,
+      lateMinutes,
+      scheduledShiftStart: shiftStartTime,
+      lateGraceMinutes: Number(graceMinutes) || 0,
+    };
+  }
+
+  return {
+    isLate: false,
+    lateMinutes: 0,
+    scheduledShiftStart: shiftStartTime,
+    lateGraceMinutes: Number(graceMinutes) || 0,
+  };
+}

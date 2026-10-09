@@ -2,7 +2,11 @@ import { connectToDatabase } from '../db.js';
 import { Attendance } from '../models/Attendance.js';
 import { User } from '../models/User.js';
 import { WorkSession } from '../models/WorkSession.js';
+import { SystemSettings } from '../models/SystemSettings.js';
+import { Shift } from '../models/Shift.js';
+import { ShiftRoster } from '../models/ShiftRoster.js';
 import { getTodayDateString } from '../utils/index.js';
+
 export function calculateTotalBreakMinutes(breaks, currentTimestamp = new Date()) {
     if (!breaks || breaks.length === 0)
         return 0;
@@ -22,17 +26,97 @@ export function calculateTotalBreakMinutes(breaks, currentTimestamp = new Date()
         return total;
     }, 0);
 }
+
 export function calculateWorkingMinutes(checkIn, checkOut, totalBreakMinutes) {
     const startMs = new Date(checkIn).getTime();
     const endMs = new Date(checkOut).getTime();
     const totalElapsedMinutes = Math.floor((endMs - startMs) / (1000 * 60));
     return Math.max(0, totalElapsedMinutes - totalBreakMinutes);
 }
+
+export function calculateLateCheckIn(checkInTime = new Date(), shiftStartTime = '09:30', graceMinutes = 15) {
+    const checkInDate = new Date(checkInTime);
+    const [hoursStr, minutesStr] = (shiftStartTime || '09:30').split(':');
+    const shiftHours = parseInt(hoursStr, 10) || 0;
+    const shiftMins = parseInt(minutesStr, 10) || 0;
+
+    const scheduledStart = new Date(
+        checkInDate.getFullYear(),
+        checkInDate.getMonth(),
+        checkInDate.getDate(),
+        shiftHours,
+        shiftMins,
+        0,
+        0
+    );
+
+    const graceMs = (Number(graceMinutes) || 0) * 60 * 1000;
+    const graceDeadline = new Date(scheduledStart.getTime() + graceMs);
+
+    if (checkInDate.getTime() > graceDeadline.getTime()) {
+        const lateMinutes = Math.max(0, Math.floor((checkInDate.getTime() - scheduledStart.getTime()) / (1000 * 60)));
+        return {
+            isLate: true,
+            lateMinutes,
+            scheduledShiftStart: shiftStartTime,
+            lateGraceMinutes: Number(graceMinutes) || 0,
+        };
+    }
+
+    return {
+        isLate: false,
+        lateMinutes: 0,
+        scheduledShiftStart: shiftStartTime,
+        lateGraceMinutes: Number(graceMinutes) || 0,
+    };
+}
+
+export async function getEmployeeShiftConfig(employeeId, dateStr) {
+    try {
+        if (employeeId && dateStr) {
+            const roster = await ShiftRoster.findOne({ employeeId, date: dateStr }).populate('shiftId').lean();
+            if (roster?.shiftId && roster.shiftId.startTime) {
+                return {
+                    shiftStartTime: roster.shiftId.startTime,
+                    shiftEndTime: roster.shiftId.endTime || '18:30',
+                    graceMinutes: roster.shiftId.graceMinutes ?? 15,
+                };
+            }
+            if (roster?.shiftCode) {
+                const shift = await Shift.findOne({ code: roster.shiftCode }).lean();
+                if (shift?.startTime) {
+                    return {
+                        shiftStartTime: shift.startTime,
+                        shiftEndTime: shift.endTime || '18:30',
+                        graceMinutes: shift.graceMinutes ?? 15,
+                    };
+                }
+            }
+        }
+        const settings = await SystemSettings.findOne({ key: 'global_config' }).lean();
+        if (settings) {
+            return {
+                shiftStartTime: settings.shiftStartTime || '09:30',
+                shiftEndTime: settings.shiftEndTime || '18:30',
+                graceMinutes: settings.lateGraceMinutes ?? 15,
+            };
+        }
+    } catch (err) {
+        console.warn('[AttendanceService] Error fetching shift config:', err);
+    }
+    return {
+        shiftStartTime: '09:30',
+        shiftEndTime: '18:30',
+        graceMinutes: 15,
+    };
+}
+
 export async function getTodayAttendance(employeeId, customDate) {
     await connectToDatabase();
     const dateStr = customDate || getTodayDateString();
     return Attendance.findOne({ employeeId, date: dateStr });
 }
+
 export function normalizeLocation(loc) {
     if (!loc) return undefined;
     if (typeof loc === 'string') return { address: loc };
@@ -64,6 +148,11 @@ export async function checkIn(employeeId, location) {
     if (!user || user.status !== 'ACTIVE') {
         return { success: false, message: 'Employee account is not active or not found' };
     }
+
+    const shiftConfig = await getEmployeeShiftConfig(employeeId, todayStr);
+    const lateCalc = calculateLateCheckIn(serverNow, shiftConfig.shiftStartTime, shiftConfig.graceMinutes);
+    const timeStr = serverNow.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
     const existing = await Attendance.findOne({ employeeId, date: todayStr });
     if (existing) {
         if (existing.status === 'PRESENT' || existing.status === 'ON_BREAK') {
@@ -99,6 +188,15 @@ export async function checkIn(employeeId, location) {
         });
         if (!existing.checkIn) {
             existing.checkIn = serverNow;
+            existing.isLate = lateCalc.isLate;
+            existing.lateMinutes = lateCalc.lateMinutes;
+            existing.scheduledShiftStart = lateCalc.scheduledShiftStart;
+            existing.lateGraceMinutes = lateCalc.lateGraceMinutes;
+        } else if (existing.isLate === undefined) {
+            existing.isLate = lateCalc.isLate;
+            existing.lateMinutes = lateCalc.lateMinutes;
+            existing.scheduledShiftStart = lateCalc.scheduledShiftStart;
+            existing.lateGraceMinutes = lateCalc.lateGraceMinutes;
         }
         if (normLoc) {
             existing.checkInLocation = normLoc;
@@ -106,11 +204,13 @@ export async function checkIn(employeeId, location) {
         existing.checkOut = undefined;
         existing.status = 'PRESENT';
         await existing.save();
+
+        const lateNote = existing.isLate ? ` (${existing.lateMinutes}m late against ${existing.scheduledShiftStart || shiftConfig.shiftStartTime} shift)` : '';
         return {
             success: true,
             message: existing.sessions.length > 1
-                ? `Shift session #${existing.sessions.length} recorded successfully at ${serverNow.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`
-                : `Shift check-in recorded successfully at ${serverNow.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}. Welcome to your shift!`,
+                ? `Shift session #${existing.sessions.length} recorded successfully at ${timeStr}.`
+                : `Shift check-in recorded successfully at ${timeStr}${lateNote}. Welcome to your shift!`,
             attendance: existing,
         };
     }
@@ -130,10 +230,16 @@ export async function checkIn(employeeId, location) {
             breaks: [],
             totalWorkingMinutes: 0,
             totalBreakMinutes: 0,
+            isLate: lateCalc.isLate,
+            lateMinutes: lateCalc.lateMinutes,
+            scheduledShiftStart: lateCalc.scheduledShiftStart,
+            lateGraceMinutes: lateCalc.lateGraceMinutes,
         });
+
+        const lateNote = lateCalc.isLate ? ` (${lateCalc.lateMinutes}m late against ${shiftConfig.shiftStartTime} shift)` : '';
         return {
             success: true,
-            message: `Shift check-in recorded successfully at ${serverNow.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}. Have a productive day!`,
+            message: `Shift check-in recorded successfully at ${timeStr}${lateNote}. Have a productive day!`,
             attendance: newAttendance,
         };
     }

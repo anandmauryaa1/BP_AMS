@@ -157,7 +157,7 @@ export default function EmployeeAttendanceClient({
         </div>
 
         {/* Monthly Summary Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3.5 mb-6">
           <Card className="p-4 border-slate-200 dark:border-slate-800">
             <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
               Days Logged
@@ -173,8 +173,21 @@ export default function EmployeeAttendanceClient({
           </Card>
 
           <Card className="p-4 border-slate-200 dark:border-slate-800">
+            <span className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5" />
+              Late Check-ins
+            </span>
+            <div className="text-xl font-bold text-amber-600 dark:text-amber-400 mt-1">
+              {summary.lateDays || 0}
+              <span className="text-xs font-normal text-slate-400 dark:text-slate-500 ml-1">
+                ({summary.totalLateMinutes || 0}m)
+              </span>
+            </div>
+          </Card>
+
+          <Card className="p-4 border-slate-200 dark:border-slate-800">
             <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-              Total Hours Worked
+              Total Hours
             </span>
             <div className="text-xl font-bold text-slate-900 dark:text-white mt-1">
               {(summary.totalWorkingMinutes / 60).toFixed(1)} hrs
@@ -183,7 +196,7 @@ export default function EmployeeAttendanceClient({
 
           <Card className="p-4 border-slate-200 dark:border-slate-800">
             <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-              Total Break Time
+              Break Time
             </span>
             <div className="text-xl font-bold text-amber-700 dark:text-amber-400 mt-1">
               {formatMinutes(summary.totalBreakMinutes)}
@@ -222,6 +235,11 @@ export default function EmployeeAttendanceClient({
                     <span className="font-mono text-slate-700 dark:text-slate-300">
                       {formatTime(record.checkIn)} - {formatTime(record.checkOut)}
                     </span>
+                    {record.checkIn && (record.isLate || (record.lateMinutes && record.lateMinutes > 0)) && (
+                      <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold block mt-0.5">
+                        ⏰ {record.lateMinutes}m Late
+                      </span>
+                    )}
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-400 uppercase font-semibold block">Worked</span>
@@ -264,7 +282,7 @@ export default function EmployeeAttendanceClient({
                 <tr>
                   <th className="py-3 px-4">Date</th>
                   <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4">Check In</th>
+                  <th className="py-3 px-4">Check In & Shift</th>
                   <th className="py-3 px-4">Check Out</th>
                   <th className="py-3 px-4">Worked</th>
                   <th className="py-3 px-4">Breaks</th>
@@ -302,7 +320,17 @@ export default function EmployeeAttendanceClient({
                         <Badge status={record.status} />
                       </td>
                       <td className="py-3.5 px-4 font-mono text-slate-600 dark:text-slate-400">
-                        {formatTime(record.checkIn)}
+                        <div>{formatTime(record.checkIn)}</div>
+                        {record.checkIn && (record.isLate || (record.lateMinutes && record.lateMinutes > 0)) ? (
+                          <div className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1 mt-0.5 font-sans">
+                            <Clock className="w-2.5 h-2.5" />
+                            {record.lateMinutes}m Late ({record.scheduledShiftStart || '09:30'})
+                          </div>
+                        ) : record.checkIn ? (
+                          <div className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5 mt-0.5 font-sans">
+                            <Check className="w-2.5 h-2.5" /> On-Time
+                          </div>
+                        ) : null}
                       </td>
                       <td className="py-3.5 px-4 font-mono text-slate-600 dark:text-slate-400">
                         {formatTime(record.checkOut)}

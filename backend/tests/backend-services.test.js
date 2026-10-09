@@ -10,6 +10,7 @@ import {
 import {
   calculateTotalBreakMinutes,
   calculateWorkingMinutes,
+  calculateLateCheckIn,
 } from '../services/attendance.js';
 import { getTodayDateString, formatMinutes } from '../utils/index.js';
 
@@ -107,6 +108,41 @@ describe('Backend Services & Security Core Audit', () => {
 
       const working = calculateWorkingMinutes(checkIn, checkOut, breakMins);
       expect(working).toBe(480);
+    });
+
+    it('should correctly determine on-time check-in before scheduled shift start', () => {
+      const punchTime = new Date(2026, 9, 9, 9, 15, 0); // 09:15
+      const result = calculateLateCheckIn(punchTime, '09:30', 15);
+      expect(result.isLate).toBe(false);
+      expect(result.lateMinutes).toBe(0);
+      expect(result.scheduledShiftStart).toBe('09:30');
+    });
+
+    it('should permit check-in within grace period without marking as late', () => {
+      // 09:30 shift + 15m grace = deadline 09:45
+      const punchTime = new Date(2026, 9, 9, 9, 40, 0); // 09:40
+      const result = calculateLateCheckIn(punchTime, '09:30', 15);
+      expect(result.isLate).toBe(false);
+      expect(result.lateMinutes).toBe(0);
+    });
+
+    it('should record late check-in and calculate late minutes past grace deadline', () => {
+      // 09:30 shift + 15m grace = deadline 09:45. Punch at 10:15 = 45m late from 09:30
+      const punchTime = new Date(2026, 9, 9, 10, 15, 0); // 10:15
+      const result = calculateLateCheckIn(punchTime, '09:30', 15);
+      expect(result.isLate).toBe(true);
+      expect(result.lateMinutes).toBe(45);
+      expect(result.scheduledShiftStart).toBe('09:30');
+      expect(result.lateGraceMinutes).toBe(15);
+    });
+
+    it('should calculate late check-in for custom roster shifts (e.g. 14:00 shift)', () => {
+      // 14:00 shift + 10m grace = deadline 14:10. Punch at 14:35 = 35m late
+      const punchTime = new Date(2026, 9, 9, 14, 35, 0); // 14:35
+      const result = calculateLateCheckIn(punchTime, '14:00', 10);
+      expect(result.isLate).toBe(true);
+      expect(result.lateMinutes).toBe(35);
+      expect(result.scheduledShiftStart).toBe('14:00');
     });
   });
 
