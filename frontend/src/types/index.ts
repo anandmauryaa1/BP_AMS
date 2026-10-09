@@ -236,6 +236,15 @@ export interface IDeliverable {
   updatedAt: Date;
 }
 
+export interface ITaskLink {
+  _id?: string;
+  id?: string;
+  title?: string;
+  url: string;
+  addedBy?: string;
+  addedAt?: string | Date;
+}
+
 export interface ITask {
   _id: string;
   taskId: string; // e.g. TSK-101
@@ -257,6 +266,7 @@ export interface ITask {
   outputUrl?: string;
   docLink?: string;
   driveLink?: string;
+  links?: ITaskLink[];
   notes?: string;
   createdAt: Date;
   updatedAt: Date;

@@ -113,6 +113,24 @@ router.post('/', requireManagerOrAdmin, async (req, res) => {
             taskData.startDate = new Date(taskData.startDate);
         }
 
+        // 6. Normalize multiple links
+        if (Array.isArray(taskData.links)) {
+            taskData.links = taskData.links
+                .filter(l => l && (typeof l === 'string' || (typeof l === 'object' && l.url)))
+                .map(l => {
+                    if (typeof l === 'string') {
+                        return { title: '', url: l.trim(), addedBy: req.user?.userId, addedAt: new Date() };
+                    }
+                    return {
+                        title: (l.title || '').trim(),
+                        url: String(l.url || '').trim(),
+                        addedBy: l.addedBy || req.user?.userId,
+                        addedAt: l.addedAt ? new Date(l.addedAt) : new Date()
+                    };
+                })
+                .filter(l => l.url.length > 0);
+        }
+
         const task = await Task.create({
             ...taskData,
             createdBy: req.user?.userId,
@@ -225,6 +243,24 @@ const handleUpdateTask = async (req, res) => {
         if (updates.projectId === '' || updates.projectId === 'null') {
             updates.projectId = null;
         }
+
+        if (Array.isArray(updates.links)) {
+            updates.links = updates.links
+                .filter(l => l && (typeof l === 'string' || (typeof l === 'object' && l.url)))
+                .map(l => {
+                    if (typeof l === 'string') {
+                        return { title: '', url: l.trim(), addedBy: req.user?.userId, addedAt: new Date() };
+                    }
+                    return {
+                        title: (l.title || '').trim(),
+                        url: String(l.url || '').trim(),
+                        addedBy: l.addedBy || req.user?.userId,
+                        addedAt: l.addedAt ? new Date(l.addedAt) : new Date()
+                    };
+                })
+                .filter(l => l.url.length > 0);
+        }
+
         const updatedTask = await Task.findByIdAndUpdate(id, updates, { new: true })
             .populate('projectId', 'title code')
             .populate('assignedTo', 'name employeeId email department')

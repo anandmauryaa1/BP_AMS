@@ -1,29 +1,34 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, Suspense, lazy } from 'react';
 import { Navbar } from '@/components/Navbar';
 import { MobileNav } from '@/components/MobileNav';
-import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
+import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { Skeleton } from '@/components/ui/Skeleton';
 import {
   CheckSquare,
-  Clock,
-  Calendar,
-  AlertCircle,
-  CheckCircle2,
-  FolderGit2,
-  FileText,
-  Filter,
+  Plus,
+  Trash2,
   ExternalLink,
   Link as LinkIcon,
 } from 'lucide-react';
-import { ITask, SessionPayload, TaskStatus } from '@/types';
-import { formatDate } from '@/lib/utils';
+import { ITask, ITaskLink, SessionPayload, TaskStatus } from '@/types';
 import { useRealTimeEvent } from '@/context/RealTimeContext';
 import { soundService } from '@/lib/audioSound';
+import { EmployeeTaskCard } from '@/components/tasks/EmployeeTaskCard';
+import { VirtualTaskList } from '@/components/tasks/VirtualTaskList';
+import {
+  filterTasksList,
+  normalizeTaskLinks,
+  sanitizeTaskUrl,
+  isValidWebUrl,
+  detectLinkCategory,
+} from '@/lib/taskUtils';
+
+// Code-splitting via lazy loading for Links Modal
+const TaskLinksModal = lazy(() => import('@/components/tasks/TaskLinksModal'));
 
 export default function EmployeeTasksClient({ initialTasks = [] }: { initialTasks?: any[] }) {
   const [user, setUser] = useState<SessionPayload | null>(null);
@@ -32,18 +37,28 @@ export default function EmployeeTasksClient({ initialTasks = [] }: { initialTask
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [isLoading, setIsLoading] = useState(initialTasks.length === 0);
   const isInitialMount = React.useRef(true);
+
+  // Edit status modal state
   const [editingTask, setEditingTask] = useState<ITask | null>(null);
   const [taskStatus, setTaskStatus] = useState<TaskStatus>('TODO');
   const [taskNotes, setTaskNotes] = useState('');
-  const [outputUrl, setOutputUrl] = useState('');
+  const [modalLinks, setModalLinks] = useState<{ title: string; url: string }[]>([]);
+  const [newLinkTitle, setNewLinkTitle] = useState('');
+  const [newLinkUrl, setNewLinkUrl] = useState('');
   const [actualMinutes, setActualMinutes] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
+
+  // Dedicated multi-link modal state
+  const [linksModalTask, setLinksModalTask] = useState<ITask | null>(null);
+
+  // Toast
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
-  const showToast = (text: string, type: 'success' | 'error' = 'success') => {
+  const showToast = useCallback((text: string, type: 'success' | 'error' = 'success') => {
     setToastMessage({ text, type });
     setTimeout(() => setToastMessage(null), 4000);
-  };
+  }, []);
 
   const fetchTasks = useCallback(async (showLoading = true) => {
     if (showLoading) setIsLoading(true);
@@ -65,7 +80,6 @@ export default function EmployeeTasksClient({ initialTasks = [] }: { initialTask
   }, [statusFilter, activeTab]);
 
   useEffect(() => {
-    // Load current user profile in background
     fetch('/api/auth/me')
       .then((res) => res.json())
       .then((data) => {
@@ -77,7 +91,6 @@ export default function EmployeeTasksClient({ initialTasks = [] }: { initialTask
   useEffect(() => {
     if (isInitialMount.current) {
       isInitialMount.current = false;
-      // If we already have SSR initial tasks and standard tab/filter, skip redundant initial client fetch
       if (initialTasks.length > 0 && activeTab === 'MY_TASKS' && statusFilter === 'ALL') {
         return;
       }
@@ -94,7 +107,7 @@ export default function EmployeeTasksClient({ initialTasks = [] }: { initialTask
       soundService.playTaskAlertSound();
       showToast(`⚡ New task assigned to you: "${newTask.title}"`, 'success');
     }
-    fetchTasks();
+    fetchTasks(false);
   });
 
   useRealTimeEvent('TASK_ASSIGNED', (assignedTask) => {
@@ -105,18 +118,19 @@ export default function EmployeeTasksClient({ initialTasks = [] }: { initialTask
       soundService.playTaskAlertSound();
       showToast(`⚡ You were assigned task: "${assignedTask.title}"`, 'success');
     }
-    fetchTasks();
+    fetchTasks(false);
   });
 
   useRealTimeEvent('TASK_UPDATED', () => {
-    fetchTasks();
+    fetchTasks(false);
   });
 
   useRealTimeEvent('TASK_DELETED', () => {
-    fetchTasks();
+    fetchTasks(false);
   });
 
-  const handlePickTask = async (taskId: string) => {
+  // Stabilized task picking handler
+  const handlePickTask = useCallback(async (taskId: string) => {
     try {
       const userId = (user as any)?._id || user?.userId || (user as any)?.id;
       const res = await fetch(`/api/tasks/${taskId}`, {
@@ -129,83 +143,151 @@ export default function EmployeeTasksClient({ initialTasks = [] }: { initialTask
         showToast(data.message || 'Failed to pick task', 'error');
       } else {
         showToast('Task picked successfully! Added to your queue.', 'success');
-        fetchTasks();
+        fetchTasks(false);
       }
     } catch {
       showToast('Network error picking task', 'error');
     }
-  };
+  }, [user, showToast, fetchTasks]);
 
-  const openEditModal = (task: ITask) => {
+  // Open Edit status modal
+  const openEditModal = useCallback((task: ITask) => {
     setEditingTask(task);
     setTaskStatus(task.status);
     setTaskNotes(task.notes || '');
-    setOutputUrl(task.outputUrl || task.driveLink || task.docLink || '');
     setActualMinutes(task.actualMinutes || 0);
-  };
+
+    const normalized = normalizeTaskLinks(task);
+    setModalLinks(normalized.map((l) => ({ title: l.title, url: l.url })));
+    setNewLinkTitle('');
+    setNewLinkUrl('');
+    setModalError(null);
+  }, []);
+
+  // Open dedicated links modal
+  const handleManageLinks = useCallback((task: ITask) => {
+    setLinksModalTask(task);
+  }, []);
+
+  const handleLinksUpdated = useCallback((taskId: string, updatedLinks: ITaskLink[]) => {
+    setTasks((prev) =>
+      prev.map((t) => (t._id === taskId ? { ...t, links: updatedLinks } : t))
+    );
+    showToast('Task links updated successfully', 'success');
+  }, [showToast]);
+
+  const handleAddModalLink = useCallback((e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!newLinkUrl.trim()) return;
+    const sanitized = sanitizeTaskUrl(newLinkUrl.trim());
+    if (!isValidWebUrl(sanitized)) {
+      setModalError('Please enter a valid URL');
+      return;
+    }
+    const { iconLabel } = detectLinkCategory(sanitized);
+    setModalLinks((prev) => [
+      ...prev,
+      {
+        title: newLinkTitle.trim() || iconLabel || 'Deliverable Link',
+        url: sanitized,
+      },
+    ]);
+    setNewLinkTitle('');
+    setNewLinkUrl('');
+    setModalError(null);
+  }, [newLinkTitle, newLinkUrl]);
+
+  const handleRemoveModalLink = useCallback((index: number) => {
+    setModalLinks((prev) => prev.filter((_, i) => i !== index));
+  }, []);
 
   const handleTaskSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingTask) return;
     setIsSubmitting(true);
+    setModalError(null);
 
     try {
+      const payloadLinks: ITaskLink[] = modalLinks
+        .map((l) => ({
+          title: l.title.trim(),
+          url: sanitizeTaskUrl(l.url),
+        }))
+        .filter((l) => isValidWebUrl(l.url));
+
+      const firstDrive = payloadLinks.find((l) => detectLinkCategory(l.url).category === 'drive');
+      const firstDoc = payloadLinks.find((l) => detectLinkCategory(l.url).category === 'docs');
+      const firstOut = payloadLinks[0]?.url || '';
+
       const res = await fetch(`/api/tasks/${editingTask._id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: taskStatus,
           notes: taskNotes,
-          outputUrl: outputUrl,
-          driveLink: outputUrl,
+          links: payloadLinks,
+          outputUrl: firstOut || undefined,
+          driveLink: firstDrive ? firstDrive.url : firstOut || undefined,
+          docLink: firstDoc ? firstDoc.url : undefined,
           actualMinutes: Number(actualMinutes),
         }),
       });
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        showToast(data.message || 'Failed to update task', 'error');
+        setModalError(data.message || 'Failed to update task');
       } else {
         showToast('Task updated successfully', 'success');
         setEditingTask(null);
-        fetchTasks();
+        fetchTasks(false);
       }
     } catch {
-      showToast('Network error updating task', 'error');
+      setModalError('Network error updating task');
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  // Memoized task item renderer for virtualized list
+  const renderTaskItem = useCallback(
+    (task: ITask) => {
+      return (
+        <EmployeeTaskCard
+          task={task}
+          activeTab={activeTab}
+          onPickTask={handlePickTask}
+          onOpenEditModal={openEditModal}
+          onManageLinks={handleManageLinks}
+        />
+      );
+    },
+    [activeTab, handlePickTask, openEditModal, handleManageLinks]
+  );
+
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 pb-20 md:pb-8 transition-colors">
-      <Navbar user={user} />
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pb-20">
+      <Navbar />
 
-      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        {/* Toast Alert */}
-        {toastMessage && (
-          <div
-            className={`fixed top-20 right-4 z-[9999] p-4 rounded-xl shadow-2xl border text-sm font-semibold flex items-center gap-2.5 animate-in slide-in-from-top-3 ${
-              toastMessage.type === 'success'
-                ? 'bg-emerald-600 text-white border-emerald-500 shadow-emerald-950/40'
-                : 'bg-rose-600 text-white border-rose-500 shadow-rose-950/40'
-            }`}
-          >
-            {toastMessage.type === 'success' ? (
-              <CheckCircle2 className="w-5 h-5 text-white shrink-0" />
-            ) : (
-              <AlertCircle className="w-5 h-5 text-white shrink-0" />
-            )}
-            <span>{toastMessage.text}</span>
-          </div>
-        )}
+      {/* Floating Toast Notification */}
+      {toastMessage && (
+        <div
+          className={`fixed bottom-20 right-4 sm:right-8 z-50 px-4 py-3 rounded-xl shadow-2xl text-xs font-bold border transition-all animate-in slide-in-from-bottom-5 ${
+            toastMessage.type === 'success'
+              ? 'bg-emerald-950 border-emerald-500 text-emerald-100 shadow-emerald-950/50'
+              : 'bg-rose-950 border-rose-500 text-rose-100 shadow-rose-950/50'
+          }`}
+        >
+          {toastMessage.text}
+        </div>
+      )}
 
-        {/* Page Top Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+        {/* Header - Strictly single h1 */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-              <CheckSquare className="w-6 h-6 text-rose-600 dark:text-rose-400" />
-              Production Tasks
+              <CheckSquare className="w-6 h-6 text-rose-600" />
+              Task Workspace & Assignments
             </h1>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               Production assignments across video editing, scripting, thumbnails, and channel deliverables.
@@ -251,10 +333,10 @@ export default function EmployeeTasksClient({ initialTasks = [] }: { initialTask
           </div>
         </div>
 
-        {/* Task Cards Grid */}
-        <div className="space-y-3">
-          {isLoading ? (
-            Array.from({ length: 4 }).map((_, idx) => (
+        {/* Task Cards - Virtualized with Stable Element Keys */}
+        {isLoading ? (
+          <div className="space-y-3">
+            {Array.from({ length: 4 }).map((_, idx) => (
               <Card key={idx} className="p-4 border-slate-200 dark:border-slate-800 animate-pulse space-y-3">
                 <div className="flex justify-between">
                   <Skeleton className="h-4 w-48" />
@@ -262,90 +344,24 @@ export default function EmployeeTasksClient({ initialTasks = [] }: { initialTask
                 </div>
                 <Skeleton className="h-3 w-64" />
               </Card>
-            ))
-          ) : tasks.length === 0 ? (
-            <Card className="p-12 text-center text-slate-400 dark:text-slate-500 text-xs border-slate-200 dark:border-slate-800">
-              {activeTab === 'MY_TASKS'
-                ? 'No tasks assigned to you match your selected filter.'
-                : 'No unassigned tasks currently available.'}
-            </Card>
-          ) : (
-            tasks.map((task) => (
-              <Card
-                key={task._id}
-                className="border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition-all p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-              >
-                <div className="space-y-1.5">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[10px] font-mono font-bold bg-slate-900 dark:bg-slate-800 text-white px-2 py-0.5 rounded border border-slate-800 dark:border-slate-700">
-                      {task.taskType}
-                    </span>
-                    <span className="text-sm font-bold text-slate-900 dark:text-white">{task.title}</span>
-                    <Badge status={task.status} />
-                    <Badge status={task.priority} />
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600 dark:text-slate-400">
-                    <div className="flex items-center gap-1 font-semibold text-slate-800 dark:text-slate-200">
-                      <FolderGit2 className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
-                      {(task.projectId as any)?.title || 'Master Project'}
-                    </div>
-                    {task.deliverableId && (
-                      <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
-                        Target: {(task.deliverableId as any)?.title || 'Deliverable'}
-                      </div>
-                    )}
-                    {task.dueDate && (
-                      <div className="flex items-center gap-1 text-[11px] font-mono text-rose-700 dark:text-rose-400">
-                        <Calendar className="w-3 h-3" />
-                        Due: {formatDate(task.dueDate)}
-                      </div>
-                    )}
-                    {task.actualMinutes ? (
-                      <div className="text-[11px] font-mono text-emerald-700 dark:text-emerald-400">
-                        Logged: {task.actualMinutes} mins
-                      </div>
-                    ) : null}
-                  </div>
-
-                  {task.description && <p className="text-xs text-slate-600 dark:text-slate-400 pt-1">{task.description}</p>}
-
-                  {(task.outputUrl || task.driveLink || task.docLink) && (
-                    <div className="pt-1">
-                      <a
-                        href={task.outputUrl || task.driveLink || task.docLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 transition"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        View Deliverable Output (Doc/Drive Link)
-                      </a>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
-                  {activeTab === 'UNASSIGNED' || !(task as any).assignedTo ? (
-                    <Button
-                      size="sm"
-                      onClick={() => handlePickTask(task._id)}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold gap-1"
-                    >
-                      Pick / Claim Task
-                    </Button>
-                  ) : (
-                    <Button size="sm" variant="outline" onClick={() => openEditModal(task)} className="text-xs font-semibold">
-                      Update Status
-                    </Button>
-                  )}
-                </div>
+            ))}
+          </div>
+        ) : (
+          <VirtualTaskList
+            items={tasks}
+            renderItem={renderTaskItem}
+            keyExtractor={(task) => task._id}
+            emptyState={
+              <Card className="p-12 text-center text-slate-400 dark:text-slate-500 text-xs border-slate-200 dark:border-slate-800">
+                {activeTab === 'MY_TASKS'
+                  ? 'No tasks assigned to you match your selected filter.'
+                  : 'No unassigned tasks currently available.'}
               </Card>
-            ))
-          )}
-        </div>
+            }
+          />
+        )}
 
-        {/* Modal: Update Task Status & Notes */}
+        {/* Modal: Update Task Status, Notes & Output Links */}
         <Modal
           isOpen={!!editingTask}
           onClose={() => setEditingTask(null)}
@@ -354,6 +370,12 @@ export default function EmployeeTasksClient({ initialTasks = [] }: { initialTask
         >
           {editingTask && (
             <form onSubmit={handleTaskSubmit} className="space-y-4">
+              {modalError && (
+                <div className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-300 text-xs">
+                  {modalError}
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1">
                   Progress Status *
@@ -371,17 +393,89 @@ export default function EmployeeTasksClient({ initialTasks = [] }: { initialTask
                 </select>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1">
-                  Deliverable Output Link (Google Drive / Doc / Asset Link)
-                </label>
-                <input
-                  type="url"
-                  value={outputUrl}
-                  onChange={(e) => setOutputUrl(e.target.value)}
-                  placeholder="Drive / Docs share link"
-                  className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-rose-500 font-mono"
-                />
+              {/* Multiple Output Links Section */}
+              <div className="space-y-2 pt-1 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide">
+                    Attached Deliverable Links ({modalLinks.length})
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (editingTask) {
+                        setEditingTask(null);
+                        handleManageLinks(editingTask);
+                      }
+                    }}
+                    className="text-[11px] text-rose-600 hover:underline flex items-center gap-1"
+                  >
+                    <LinkIcon className="w-3 h-3" /> Full Link Manager
+                  </button>
+                </div>
+
+                {modalLinks.length > 0 && (
+                  <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                    {modalLinks.map((l, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between gap-2 p-2 bg-slate-50 dark:bg-slate-900/60 rounded-lg border border-slate-200 dark:border-slate-800 text-xs"
+                      >
+                        <div className="truncate flex items-center gap-1.5 flex-1 min-w-0">
+                          <span className="font-semibold text-slate-800 dark:text-slate-200 shrink-0">
+                            {l.title}:
+                          </span>
+                          <span className="font-mono text-slate-500 dark:text-slate-400 truncate">
+                            {l.url}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <a
+                            href={l.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1 text-slate-400 hover:text-blue-500"
+                            title="Open link"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveModalLink(idx)}
+                            className="p-1 text-slate-400 hover:text-red-500"
+                            title="Remove"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <input
+                    type="text"
+                    placeholder="Label (e.g. Export 4K)"
+                    value={newLinkTitle}
+                    onChange={(e) => setNewLinkTitle(e.target.value)}
+                    className="px-2.5 py-1.5 text-xs rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white"
+                  />
+                  <input
+                    type="url"
+                    placeholder="URL (https://drive.google.com/...)"
+                    value={newLinkUrl}
+                    onChange={(e) => setNewLinkUrl(e.target.value)}
+                    className="sm:col-span-2 px-2.5 py-1.5 text-xs font-mono rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddModalLink}
+                  disabled={!newLinkUrl.trim()}
+                  className="w-full py-1.5 px-3 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-xs font-semibold text-slate-700 dark:text-zinc-300 disabled:opacity-40 flex items-center justify-center gap-1"
+                >
+                  <Plus className="w-3 h-3" /> Add Link
+                </button>
               </div>
 
               <div>
@@ -400,7 +494,7 @@ export default function EmployeeTasksClient({ initialTasks = [] }: { initialTask
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1">
-                  Production Notes / Links
+                  Production Notes
                 </label>
                 <textarea
                   rows={3}
@@ -422,12 +516,22 @@ export default function EmployeeTasksClient({ initialTasks = [] }: { initialTask
             </form>
           )}
         </Modal>
+
+        {/* Lazy Loaded Multi-Link Management Modal */}
+        {linksModalTask && (
+          <Suspense fallback={null}>
+            <TaskLinksModal
+              isOpen={!!linksModalTask}
+              task={linksModalTask}
+              onClose={() => setLinksModalTask(null)}
+              onLinksUpdated={handleLinksUpdated}
+              isAdmin={false}
+            />
+          </Suspense>
+        )}
       </main>
 
       <MobileNav />
     </div>
   );
 }
-
-
-

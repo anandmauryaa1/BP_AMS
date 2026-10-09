@@ -22,11 +22,13 @@ import { DrillDownModal, DrillDownItem } from './DrillDownModal';
 interface DailyReportViewProps {
   employeeId?: string;
   isEmployeeSelf?: boolean;
+  titleTag?: 'h1' | 'h2';
 }
 
 export const DailyReportView: React.FC<DailyReportViewProps> = ({
   employeeId,
   isEmployeeSelf = false,
+  titleTag = 'h2',
 }) => {
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [report, setReport] = useState<IEmployeeDailyReport | null>(null);
@@ -111,10 +113,17 @@ export const DailyReportView: React.FC<DailyReportViewProps> = ({
       {/* Top Header & Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-rose-600" />
-            {isEmployeeSelf ? 'Today & Daily Progress' : 'Employee Daily Report'}
-          </h2>
+          {titleTag === 'h1' ? (
+            <h1 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-rose-600" />
+              {isEmployeeSelf ? 'Today & Daily Progress' : 'Employee Daily Report'}
+            </h1>
+          ) : (
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-rose-600" />
+              {isEmployeeSelf ? 'Today & Daily Progress' : 'Employee Daily Report'}
+            </h2>
+          )}
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             Transparent, raw activity breakdown for {date}
           </p>

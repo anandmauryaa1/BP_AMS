@@ -40,6 +40,7 @@ import {
   Priority,
 } from '@/types';
 import { formatDate } from '@/lib/utils';
+import { normalizeTaskLinks } from '@/lib/taskUtils';
 import { useRealTimeEvent } from '@/context/RealTimeContext';
 
 export default function AdminProjectDetailPage() {
@@ -887,7 +888,7 @@ export default function AdminProjectDetailPage() {
             ) : (
               <div className="space-y-3">
                 {tasks.map((task) => {
-                  const hasTaskOutput = task.outputUrl || task.driveLink || task.docLink;
+                  const taskLinks = normalizeTaskLinks(task);
                   return (
                     <div
                       key={task._id}
@@ -951,31 +952,23 @@ export default function AdminProjectDetailPage() {
                       </div>
 
                       {/* Task Deliverable / Output URL Attachment */}
-                      {hasTaskOutput && (
+                      {(taskLinks.length > 0 || task.notes) && (
                         <div className="pt-2 border-t border-border/50 flex flex-wrap items-center gap-2 text-xs">
-                          <span className="text-[10px] uppercase font-bold text-muted-foreground">Task Output:</span>
-                          {(task.outputUrl || task.driveLink) && (
+                          <span className="text-[10px] uppercase font-bold text-muted-foreground">
+                            Links ({taskLinks.length}):
+                          </span>
+                          {taskLinks.map((link) => (
                             <a
-                              href={task.outputUrl || task.driveLink}
+                              key={link.id}
+                              href={link.url}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-semibold hover:underline"
                             >
-                              <HardDrive className="w-3 h-3" />
-                              View Output Link <ExternalLink className="w-2.5 h-2.5" />
+                              <LinkIcon className="w-3 h-3" />
+                              {link.title} <ExternalLink className="w-2.5 h-2.5" />
                             </a>
-                          )}
-                          {task.docLink && (
-                            <a
-                              href={task.docLink}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-xs font-semibold hover:underline"
-                            >
-                              <FileText className="w-3 h-3" />
-                              Doc / Script <ExternalLink className="w-2.5 h-2.5" />
-                            </a>
-                          )}
+                          ))}
                           {task.notes && (
                             <span className="text-muted-foreground text-[11px] italic">
                               "{task.notes}"

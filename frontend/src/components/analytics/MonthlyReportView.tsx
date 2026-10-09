@@ -20,11 +20,13 @@ import { DrillDownModal, DrillDownItem } from './DrillDownModal';
 interface MonthlyReportViewProps {
   employeeId?: string;
   isEmployeeSelf?: boolean;
+  titleTag?: 'h1' | 'h2';
 }
 
 export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
   employeeId,
   isEmployeeSelf = false,
+  titleTag = 'h2',
 }) => {
   const now = new Date();
   const [year, setYear] = useState<number>(now.getFullYear());
@@ -112,10 +114,17 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
       {/* Top Header & Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-rose-600" />
-            {isEmployeeSelf ? 'This Month Progress' : 'Employee Monthly Report'}
-          </h2>
+          {titleTag === 'h1' ? (
+            <h1 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-rose-600" />
+              {isEmployeeSelf ? 'This Month Progress' : 'Employee Monthly Report'}
+            </h1>
+          ) : (
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-rose-600" />
+              {isEmployeeSelf ? 'This Month Progress' : 'Employee Monthly Report'}
+            </h2>
+          )}
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             Comprehensive monthly performance snapshot & historical comparison
           </p>

@@ -1,33 +1,49 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
+import React, { useState, useEffect, useCallback, useMemo, Suspense, lazy } from 'react';
 import { Navbar } from '@/components/Navbar';
 import { AdminNav } from '@/components/AdminNav';
 import {
   CheckSquare,
   Plus,
   Search,
-  Filter,
-  User,
-  Calendar,
-  Clock,
-  FolderKanban,
-  AlertCircle,
   RefreshCw,
   X,
-  ExternalLink,
+  AlertCircle,
   HardDrive,
   FileText,
+  Video,
+  Figma,
+  Github,
+  Globe,
   Link as LinkIcon,
-  Copy,
-  Check,
+  Trash2,
 } from 'lucide-react';
-import { TaskStatus, Priority, TaskType } from '@/types';
-import { formatDate } from '@/lib/utils';
+import { ITask, ITaskLink } from '@/types';
 import { useRealTimeEvent } from '@/context/RealTimeContext';
+import { AdminTaskRow } from '@/components/tasks/AdminTaskRow';
+import { VirtualTaskList } from '@/components/tasks/VirtualTaskList';
+import {
+  filterTasksList,
+  sanitizeTaskUrl,
+  isValidWebUrl,
+  detectLinkCategory,
+} from '@/lib/taskUtils';
 
-export default function AdminTasksClient({ initialTasks = [], initialProjects = [], initialEmployees = [] }: { initialTasks?: any[]; initialProjects?: any[]; initialEmployees?: any[] }) {
+// Code-splitting via lazy loading for modals
+const TaskLinksModal = lazy(() => import('@/components/tasks/TaskLinksModal'));
+
+interface AdminTasksClientProps {
+  initialTasks?: any[];
+  initialProjects?: any[];
+  initialEmployees?: any[];
+}
+
+export default function AdminTasksClient({
+  initialTasks = [],
+  initialProjects = [],
+  initialEmployees = [],
+}: AdminTasksClientProps) {
   const [tasks, setTasks] = useState<any[]>(initialTasks);
   const [projects, setProjects] = useState<any[]>(initialProjects);
   const [employees, setEmployees] = useState<any[]>(initialEmployees);
@@ -39,11 +55,12 @@ export default function AdminTasksClient({ initialTasks = [], initialProjects = 
   const [assigneeFilter, setAssigneeFilter] = useState<string>('ALL');
   const [projectFilter, setProjectFilter] = useState<string>('ALL');
 
-  // Modal
+  // Create Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Create form initial state
   const [form, setForm] = useState({
     projectId: '',
     title: '',
@@ -55,10 +72,18 @@ export default function AdminTasksClient({ initialTasks = [], initialProjects = 
     description: '',
   });
 
-  const fetchTasks = async () => {
+  // Multiple links state inside create modal
+  const [createLinks, setCreateLinks] = useState<{ title: string; url: string }[]>([]);
+  const [linkInputTitle, setLinkInputTitle] = useState('');
+  const [linkInputUrl, setLinkInputUrl] = useState('');
+
+  // Selected task for Links Management Modal
+  const [linksModalTask, setLinksModalTask] = useState<ITask | null>(null);
+
+  const fetchTasks = useCallback(async () => {
     try {
       setLoading(true);
-      const token = typeof window !== 'undefined' ? (localStorage.getItem('auth_token')) : null;
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
       const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
       let url = '/api/tasks';
@@ -77,11 +102,11 @@ export default function AdminTasksClient({ initialTasks = [], initialProjects = 
     } finally {
       setLoading(false);
     }
-  };
+  }, [statusFilter, assigneeFilter, projectFilter]);
 
-  const fetchMeta = async () => {
+  const fetchMeta = useCallback(async () => {
     try {
-      const token = typeof window !== 'undefined' ? (localStorage.getItem('auth_token')) : null;
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
       const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
       const [projRes, empRes] = await Promise.all([
@@ -97,15 +122,15 @@ export default function AdminTasksClient({ initialTasks = [], initialProjects = 
     } catch (err) {
       console.error('Failed to load metadata:', err);
     }
-  };
-
-  useEffect(() => {
-    fetchMeta();
   }, []);
 
   useEffect(() => {
+    fetchMeta();
+  }, [fetchMeta]);
+
+  useEffect(() => {
     fetchTasks();
-  }, [statusFilter, assigneeFilter, projectFilter]);
+  }, [fetchTasks]);
 
   // Real-time synchronization
   useRealTimeEvent('TASK_CREATED', (newTask) => {
@@ -156,12 +181,113 @@ export default function AdminTasksClient({ initialTasks = [], initialProjects = 
     }
   });
 
+  // Stabilized callbacks for item operations
+  const handleUpdateStatus = useCallback(async (taskId: string, newStatus: string) => {
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+      const res = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: 'include',
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (res.ok) {
+        setTasks((prev) =>
+          prev.map((t) => (t._id === taskId ? { ...t, status: newStatus } : t))
+        );
+      }
+    } catch (err) {
+      console.error('Failed to update status:', err);
+    }
+  }, []);
+
+  const handleUpdateAssignee = useCallback(async (taskId: string, newAssigneeId: string) => {
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+      const res = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: 'include',
+        body: JSON.stringify({ assignedTo: newAssigneeId || 'unassigned', assigneeId: newAssigneeId || 'unassigned' }),
+      });
+      if (res.ok) {
+        await fetchTasks();
+      }
+    } catch (err) {
+      console.error('Failed to update assignee:', err);
+    }
+  }, [fetchTasks]);
+
+  const handleUpdateTaskProject = useCallback(async (taskId: string, newProjectId: string) => {
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+      const res = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: 'include',
+        body: JSON.stringify({ projectId: newProjectId || null }),
+      });
+      if (res.ok) {
+        await fetchTasks();
+      }
+    } catch (err) {
+      console.error('Failed to update task project:', err);
+    }
+  }, [fetchTasks]);
+
+  const handleManageLinks = useCallback((task: ITask) => {
+    setLinksModalTask(task);
+  }, []);
+
+  const handleLinksUpdated = useCallback((taskId: string, updatedLinks: ITaskLink[]) => {
+    setTasks((prev) =>
+      prev.map((t) => (t._id === taskId ? { ...t, links: updatedLinks } : t))
+    );
+  }, []);
+
+  const handleAddCreateLink = useCallback((e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!linkInputUrl.trim()) return;
+    const sanitized = sanitizeTaskUrl(linkInputUrl.trim());
+    if (!isValidWebUrl(sanitized)) {
+      setError('Please enter a valid URL');
+      return;
+    }
+    const { iconLabel } = detectLinkCategory(sanitized);
+    setCreateLinks((prev) => [
+      ...prev,
+      {
+        title: linkInputTitle.trim() || iconLabel || 'Resource',
+        url: sanitized,
+      },
+    ]);
+    setLinkInputTitle('');
+    setLinkInputUrl('');
+    setError(null);
+  }, [linkInputTitle, linkInputUrl]);
+
+  const handleRemoveCreateLink = useCallback((index: number) => {
+    setCreateLinks((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     setError(null);
     try {
-      const token = typeof window !== 'undefined' ? (localStorage.getItem('auth_token')) : null;
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+
+      const firstDrive = createLinks.find((l) => detectLinkCategory(l.url).category === 'drive');
+      const firstDoc = createLinks.find((l) => detectLinkCategory(l.url).category === 'docs');
 
       const payload: any = {
         projectId: form.projectId || undefined,
@@ -174,6 +300,10 @@ export default function AdminTasksClient({ initialTasks = [], initialProjects = 
         estimatedMinutes: form.estimatedMinutes ? parseInt(form.estimatedMinutes, 10) : 60,
         dueDate: form.dueDate || undefined,
         description: form.description?.trim() || undefined,
+        links: createLinks,
+        driveLink: firstDrive ? firstDrive.url : undefined,
+        docLink: firstDoc ? firstDoc.url : undefined,
+        outputUrl: createLinks[0]?.url || undefined,
       };
 
       const res = await fetch('/api/tasks', {
@@ -201,6 +331,9 @@ export default function AdminTasksClient({ initialTasks = [], initialProjects = 
         dueDate: '',
         description: '',
       });
+      setCreateLinks([]);
+      setLinkInputTitle('');
+      setLinkInputUrl('');
       setIsModalOpen(false);
       await fetchTasks();
     } catch (err: any) {
@@ -210,79 +343,33 @@ export default function AdminTasksClient({ initialTasks = [], initialProjects = 
     }
   };
 
-  const handleUpdateStatus = async (taskId: string, newStatus: string) => {
-    try {
-      const token = typeof window !== 'undefined' ? (localStorage.getItem('auth_token')) : null;
-      const res = await fetch(`/api/tasks/${taskId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        credentials: 'include',
-        body: JSON.stringify({ status: newStatus }),
-      });
-      if (res.ok) {
-        setTasks((prev) =>
-          prev.map((t) => (t._id === taskId ? { ...t, status: newStatus } : t))
-        );
-      }
-    } catch (err) {
-      console.error('Failed to update status:', err);
-    }
-  };
+  // Memoized task filtering using pure function
+  const filteredTasks = useMemo(() => {
+    return filterTasksList(tasks, {
+      query: searchQuery,
+      status: statusFilter,
+      assigneeId: assigneeFilter,
+      projectId: projectFilter,
+    });
+  }, [tasks, searchQuery, statusFilter, assigneeFilter, projectFilter]);
 
-  const handleUpdateAssignee = async (taskId: string, newAssigneeId: string) => {
-    try {
-      const token = typeof window !== 'undefined' ? (localStorage.getItem('auth_token')) : null;
-      const res = await fetch(`/api/tasks/${taskId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        credentials: 'include',
-        body: JSON.stringify({ assignedTo: newAssigneeId || 'unassigned', assigneeId: newAssigneeId || 'unassigned' }),
-      });
-      if (res.ok) {
-        await fetchTasks();
-      }
-    } catch (err) {
-      console.error('Failed to update assignee:', err);
-    }
-  };
-
-  const handleUpdateTaskProject = async (taskId: string, newProjectId: string) => {
-    try {
-      const token = typeof window !== 'undefined' ? (localStorage.getItem('auth_token')) : null;
-      const res = await fetch(`/api/tasks/${taskId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        credentials: 'include',
-        body: JSON.stringify({ projectId: newProjectId || null }),
-      });
-      if (res.ok) {
-        await fetchTasks();
-      }
-    } catch (err) {
-      console.error('Failed to update task project:', err);
-    }
-  };
-
-  const filteredTasks = tasks.filter((t) => {
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    const assigneeName = (t.assignedTo?.name || t.assigneeId?.name || '').toLowerCase();
-    const projectTitle = (t.projectId?.title || t.projectId?.name || '').toLowerCase();
-    return (
-      t.title.toLowerCase().includes(q) ||
-      projectTitle.includes(q) ||
-      assigneeName.includes(q)
-    );
-  });
+  // Memoized item renderer for virtualized list
+  const renderTaskItem = useCallback(
+    (task: ITask) => {
+      return (
+        <AdminTaskRow
+          task={task}
+          projects={projects}
+          employees={employees}
+          onUpdateProject={handleUpdateTaskProject}
+          onUpdateAssignee={handleUpdateAssignee}
+          onUpdateStatus={handleUpdateStatus}
+          onManageLinks={handleManageLinks}
+        />
+      );
+    },
+    [projects, employees, handleUpdateTaskProject, handleUpdateAssignee, handleUpdateStatus, handleManageLinks]
+  );
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 text-slate-900 dark:text-zinc-100 flex flex-col transition-colors">
@@ -290,7 +377,7 @@ export default function AdminTasksClient({ initialTasks = [], initialProjects = 
       <AdminNav />
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
-        {/* Header */}
+        {/* Header - Single h1 */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
@@ -310,7 +397,11 @@ export default function AdminTasksClient({ initialTasks = [], initialProjects = 
               <RefreshCw className="w-4 h-4" />
             </button>
             <button
-              onClick={() => { setError(null); setIsModalOpen(true); }}
+              onClick={() => {
+                setError(null);
+                setCreateLinks([]);
+                setIsModalOpen(true);
+              }}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-medium text-sm transition shadow-lg shadow-rose-600/20"
             >
               <Plus className="w-4 h-4" />
@@ -354,6 +445,7 @@ export default function AdminTasksClient({ initialTasks = [], initialProjects = 
               className="px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-slate-700 dark:text-zinc-300 text-xs focus:outline-none focus:ring-1 focus:ring-rose-500"
             >
               <option value="ALL">All Crew Members</option>
+              <option value="unassigned">👤 Unassigned Only</option>
               {employees.map((emp) => (
                 <option key={emp._id} value={emp._id}>
                   {emp.name}
@@ -379,173 +471,36 @@ export default function AdminTasksClient({ initialTasks = [], initialProjects = 
           </div>
         </div>
 
-        {/* Task List */}
+        {/* Task List - Virtualized with Stable Element Keys */}
         {loading ? (
           <div className="space-y-3">
             {[1, 2, 3, 4, 5].map((i) => (
               <div key={i} className="h-20 bg-slate-100 dark:bg-zinc-900/40 rounded-xl border border-slate-200 dark:border-zinc-800 animate-pulse" />
             ))}
           </div>
-        ) : filteredTasks.length === 0 ? (
-          <div className="bg-white dark:bg-zinc-900/40 rounded-2xl border border-slate-200 dark:border-zinc-800 p-12 text-center text-slate-500 dark:text-zinc-500 shadow-sm">
-            <CheckSquare className="w-12 h-12 mx-auto mb-3 opacity-30 text-slate-400" />
-            <p className="text-base font-medium text-slate-700 dark:text-zinc-400">No production tasks match your filter.</p>
-          </div>
         ) : (
-          <div className="space-y-2">
-            {filteredTasks.map((task) => {
-              const currentAssigneeId = task.assignedTo?._id || task.assignedTo || task.assigneeId?._id || task.assigneeId || '';
-              const currentProjectId = task.projectId?._id || task.projectId || '';
-              const assigneeName = task.assignedTo?.name || task.assigneeId?.name || 'Unassigned';
-
-              return (
-                <div
-                  key={task._id}
-                  className="p-4 rounded-xl bg-white dark:bg-zinc-900/50 border border-slate-200 dark:border-zinc-800/80 hover:border-slate-300 dark:hover:border-zinc-700 hover:shadow-sm dark:hover:bg-zinc-900/80 transition flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm"
-                >
-                  <div className="space-y-1.5">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-semibold text-slate-900 dark:text-zinc-100 text-sm">{task.title}</span>
-                      <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-[10px] font-mono text-slate-700 dark:text-zinc-400 font-medium">
-                        {(task.type || task.taskType || 'TASK').replace(/_/g, ' ')}
-                      </span>
-                      {task.priority === 'URGENT' && (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-500/20 text-red-500 dark:text-red-400">
-                          URGENT
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-zinc-400">
-                      {task.projectId && (
-                        <Link
-                          href={`/admin/projects/${task.projectId._id || task.projectId}`}
-                          className="text-slate-700 dark:text-zinc-300 hover:text-rose-600 dark:hover:text-red-400 flex items-center gap-1 font-medium transition"
-                        >
-                          <FolderKanban className="w-3.5 h-3.5 text-slate-400 dark:text-zinc-500" />
-                          {task.projectId.title || task.projectId.name || 'Project'}
-                        </Link>
-                      )}
-                      <span className="flex items-center gap-1 text-slate-600 dark:text-zinc-400">
-                        <User className="w-3.5 h-3.5 text-slate-400 dark:text-zinc-500" />
-                        {assigneeName}
-                      </span>
-                      {task.estimatedMinutes && (
-                        <span className="flex items-center gap-1 text-slate-400 dark:text-zinc-500">
-                          <Clock className="w-3.5 h-3.5" />
-                          {task.estimatedMinutes}m
-                        </span>
-                      )}
-                      {task.dueDate && (
-                        <span className="flex items-center gap-1 text-slate-400 dark:text-zinc-500">
-                          <Calendar className="w-3.5 h-3.5" />
-                          Due {formatDate(task.dueDate)}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Output Links Attached by Assignee */}
-                    {(task.outputUrl || task.driveLink || task.docLink || task.notes) && (
-                      <div className="pt-2 border-t border-slate-100 dark:border-zinc-800/80 flex flex-wrap items-center gap-2 text-xs">
-                        <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-zinc-500">
-                          Output:
-                        </span>
-                        {(task.outputUrl || task.driveLink) && (
-                          <a
-                            href={task.outputUrl || task.driveLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-semibold hover:underline"
-                          >
-                            <HardDrive className="w-3 h-3" />
-                            Drive / Output <ExternalLink className="w-2.5 h-2.5" />
-                          </a>
-                        )}
-                        {task.docLink && (
-                          <a
-                            href={task.docLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-xs font-semibold hover:underline"
-                          >
-                            <FileText className="w-3 h-3" />
-                            Doc / Script <ExternalLink className="w-2.5 h-2.5" />
-                          </a>
-                        )}
-                        {task.notes && (
-                          <span className="text-slate-500 dark:text-zinc-400 text-[11px] italic">
-                            "{task.notes}"
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Inline Assignment & Status Controls */}
-                  <div className="flex flex-wrap items-center gap-2 shrink-0">
-                    {/* Project Selector */}
-                    <select
-                      value={String(currentProjectId)}
-                      onChange={(e) => handleUpdateTaskProject(task._id, e.target.value)}
-                      className="px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-700 text-xs font-medium text-slate-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-rose-500 max-w-[140px] truncate"
-                      title="Assign Project"
-                    >
-                      <option value="">📁 General / No Project</option>
-                      {projects.map((p: any) => {
-                        const pid = String(p._id || p.id || '');
-                        return (
-                          <option key={pid} value={pid}>
-                            📁 {p.title || p.name}
-                          </option>
-                        );
-                      })}
-                    </select>
-
-                    {/* Crew Assignee Selector */}
-                    <select
-                      value={String(currentAssigneeId)}
-                      onChange={(e) => handleUpdateAssignee(task._id, e.target.value)}
-                      className="px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-700 text-xs font-semibold text-slate-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-rose-500 max-w-[140px] truncate"
-                      title="Assign Crew Member"
-                    >
-                      <option value="">👤 Unassigned</option>
-                      {employees.map((emp) => (
-                        <option key={emp._id} value={emp._id}>
-                          👤 {emp.name}
-                        </option>
-                      ))}
-                    </select>
-
-                    {/* Task Status Dropdown */}
-                    <select
-                      value={task.status}
-                      onChange={(e) => handleUpdateStatus(task._id, e.target.value)}
-                      className="px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-700 text-xs font-semibold text-slate-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-rose-500"
-                    >
-                      <option value="TODO">To Do</option>
-                      <option value="IN_PROGRESS">In Progress</option>
-                      <option value="IN_REVIEW">In Review</option>
-                      <option value="CHANGES_REQUESTED">Changes Req.</option>
-                      <option value="APPROVED">Approved</option>
-                      <option value="COMPLETED">Completed</option>
-                      <option value="BLOCKED">Blocked</option>
-                    </select>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <VirtualTaskList
+            items={filteredTasks}
+            renderItem={renderTaskItem}
+            keyExtractor={(task) => task._id}
+            emptyState={
+              <div className="bg-white dark:bg-zinc-900/40 rounded-2xl border border-slate-200 dark:border-zinc-800 p-12 text-center text-slate-500 dark:text-zinc-500 shadow-sm">
+                <CheckSquare className="w-12 h-12 mx-auto mb-3 opacity-30 text-slate-400" />
+                <p className="text-base font-medium text-slate-700 dark:text-zinc-400">No production tasks match your filter.</p>
+              </div>
+            }
+          />
         )}
 
-        {/* Modal */}
+        {/* Create Task Modal */}
         {isModalOpen && (
           <div className="fixed inset-0 bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl">
+            <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                   <CheckSquare className="w-5 h-5 text-rose-600 dark:text-red-500" />
-                  Create Task
-                </h3>
+                  Create Production Task
+                </h2>
                 <button
                   onClick={() => setIsModalOpen(false)}
                   className="text-slate-400 hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300 text-sm"
@@ -678,6 +633,61 @@ export default function AdminTasksClient({ initialTasks = [], initialProjects = 
                   />
                 </div>
 
+                {/* Optional Links section during creation */}
+                <div className="pt-2 border-t border-slate-100 dark:border-zinc-800/80 space-y-2">
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-zinc-400 uppercase">
+                    Initial Resource Links ({createLinks.length})
+                  </label>
+
+                  {createLinks.length > 0 && (
+                    <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                      {createLinks.map((l, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between gap-2 p-2 bg-slate-50 dark:bg-zinc-950 rounded-lg text-xs"
+                        >
+                          <div className="truncate">
+                            <span className="font-semibold text-slate-800 dark:text-slate-200">{l.title}: </span>
+                            <span className="font-mono text-slate-500 dark:text-slate-400">{l.url}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveCreateLink(idx)}
+                            className="text-slate-400 hover:text-red-500 p-1"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <input
+                      type="text"
+                      placeholder="Label (e.g. Drive Assets)"
+                      value={linkInputTitle}
+                      onChange={(e) => setLinkInputTitle(e.target.value)}
+                      className="px-2.5 py-1.5 text-xs rounded-lg bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-white"
+                    />
+                    <input
+                      type="text"
+                      placeholder="URL (https://...)"
+                      value={linkInputUrl}
+                      onChange={(e) => setLinkInputUrl(e.target.value)}
+                      className="sm:col-span-2 px-2.5 py-1.5 text-xs rounded-lg bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 text-slate-900 dark:text-white"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddCreateLink}
+                    disabled={!linkInputUrl.trim()}
+                    className="w-full py-1.5 px-3 rounded-lg bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 text-xs font-semibold text-slate-700 dark:text-zinc-300 disabled:opacity-40 flex items-center justify-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" /> Attach Link
+                  </button>
+                </div>
+
                 <div className="flex justify-end gap-2 pt-2">
                   <button
                     type="button"
@@ -698,10 +708,20 @@ export default function AdminTasksClient({ initialTasks = [], initialProjects = 
             </div>
           </div>
         )}
+
+        {/* Lazy Loaded Links Management Modal */}
+        {linksModalTask && (
+          <Suspense fallback={null}>
+            <TaskLinksModal
+              isOpen={!!linksModalTask}
+              task={linksModalTask}
+              onClose={() => setLinksModalTask(null)}
+              onLinksUpdated={handleLinksUpdated}
+              isAdmin={true}
+            />
+          </Suspense>
+        )}
       </main>
     </div>
   );
 }
-
-
-

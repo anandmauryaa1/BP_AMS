@@ -20,9 +20,13 @@ import { formatDate, formatMinutes } from '@/lib/utils';
 
 interface DeepAnalysisViewProps {
   employeeId: string;
+  titleTag?: 'h1' | 'h2';
 }
 
-export const DeepAnalysisView: React.FC<DeepAnalysisViewProps> = ({ employeeId }) => {
+export const DeepAnalysisView: React.FC<DeepAnalysisViewProps> = ({
+  employeeId,
+  titleTag = 'h2',
+}) => {
   const [analysis, setAnalysis] = useState<any | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -102,10 +106,17 @@ export const DeepAnalysisView: React.FC<DeepAnalysisViewProps> = ({ employeeId }
       {/* Header & Global Filters */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-rose-600" />
-            Deep Analytics & Transparent Diagnostics
-          </h2>
+          {titleTag === 'h1' ? (
+            <h1 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-rose-600" />
+              Deep Analytics & Transparent Diagnostics
+            </h1>
+          ) : (
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-rose-600" />
+              Deep Analytics & Transparent Diagnostics
+            </h2>
+          )}
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             {analysis?.employee?.name
               ? `${analysis.employee.name} (${analysis.employee.employeeId})`
