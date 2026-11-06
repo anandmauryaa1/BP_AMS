@@ -2,13 +2,28 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { ServiceWorkerRegister } from '@/components/ServiceWorkerRegister';
+import { PwaInstallPrompt } from '@/components/PwaInstallPrompt';
 import { RealTimeProvider } from '@/context/RealTimeContext';
 
 export const metadata: Metadata = {
   title: 'blindarea Production - Attendance Management System',
   description: 'Lightweight & secure Office Attendance Management System for blindarea Production',
+  manifest: '/manifest.json',
+  applicationName: 'BP AMS',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'BP AMS',
+  },
+  formatDetection: {
+    telephone: false,
+  },
   icons: {
     icon: '/favicon.ico',
+    apple: [
+      { url: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icons/icon-512x512.png', sizes: '512x512', type: 'image/png' },
+    ],
   },
 };
 
@@ -51,6 +66,7 @@ export default function RootLayout({
         <ThemeProvider>
           <RealTimeProvider>
             <ServiceWorkerRegister />
+            <PwaInstallPrompt />
             {children}
           </RealTimeProvider>
         </ThemeProvider>

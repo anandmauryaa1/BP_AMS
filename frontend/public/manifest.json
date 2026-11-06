@@ -1,0 +1,62 @@
+{
+  "name": "blindarea Production - Attendance Management System",
+  "short_name": "BP AMS",
+  "description": "Production studio enterprise attendance, shift roster, tasks, payroll, and duty tracking system.",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#09090b",
+  "theme_color": "#e11d48",
+  "categories": ["business", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Punch Clock & Attendance",
+      "short_name": "Punch Clock",
+      "description": "Quick punch in/out attendance action",
+      "url": "/attendance",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Production Tasks",
+      "short_name": "Tasks",
+      "description": "Check your studio tasks and deliverables",
+      "url": "/tasks",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Payroll & Payslips",
+      "short_name": "Payroll",
+      "description": "View monthly payslips and compensation",
+      "url": "/payroll",
+      "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
+    }
+  ]
+}
+
