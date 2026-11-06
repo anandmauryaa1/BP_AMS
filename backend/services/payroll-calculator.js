@@ -92,6 +92,11 @@ export async function generateMonthlyPayroll(month, year, employeeId = null) {
         const isHraOn = structure.isHraEligible !== false;
         const isSpecialAllowanceOn = structure.isSpecialAllowanceEligible !== false;
 
+        // Custom Dynamic Components
+        const customComponents = Array.isArray(structure.customComponents) ? structure.customComponents : [];
+        const customEarnings = [];
+        const customDeductions = [];
+
         // Proportional breakdown based on earned gross
         const refGross = structure.monthlyGross || Math.round(structure.annualCtc / 12) || 1;
         const basicRatio = structure.basic ? (structure.basic / refGross) : 0.5;
@@ -99,13 +104,47 @@ export async function generateMonthlyPayroll(month, year, employeeId = null) {
 
         const basicPaid = isBasicOn ? Math.round(earnedGross * basicRatio) : 0;
         const hraPaid = isHraOn ? Math.round(earnedGross * hraRatio) : 0;
-        const specialAllowancePaid = isSpecialAllowanceOn ? Math.max(0, earnedGross - basicPaid - hraPaid) : 0;
-        const grossEarnings = basicPaid + hraPaid + specialAllowancePaid + (structure.conveyance || 0);
 
-        // Deductions
-        const pfDeduction = isPfOn ? Math.round(Math.min(1800, (basicPaid || (grossEarnings * 0.5)) * 0.12)) : 0;
-        const esicDeduction = isEsicOn ? Math.round(grossEarnings * 0.0075) : 0;
-        const ptDeduction = (isPtOn && grossEarnings > 10000) ? (structure.professionalTax || 200) : 0;
+        // Calculate dynamic custom allowances & deductions
+        let totalCustomEarnings = 0;
+        let totalCustomDeductions = 0;
+
+        for (const comp of customComponents) {
+            if (comp.enabled === false) continue;
+            let compAmount = 0;
+            if (comp.calculationMode === 'PERCENTAGE') {
+                const baseVal = comp.percentageOf === 'BASIC' ? basicPaid : earnedGross;
+                compAmount = Math.round((baseVal * (comp.value || 0)) / 100);
+            } else {
+                compAmount = Math.round(comp.value || 0);
+            }
+
+            if (comp.type === 'EARNING') {
+                customEarnings.push({ name: comp.name, amount: compAmount });
+                totalCustomEarnings += compAmount;
+            } else if (comp.type === 'DEDUCTION') {
+                customDeductions.push({ name: comp.name, amount: compAmount });
+                totalCustomDeductions += compAmount;
+            }
+        }
+
+        const specialAllowancePaid = isSpecialAllowanceOn ? Math.max(0, earnedGross - basicPaid - hraPaid) : 0;
+        const grossEarnings = basicPaid + hraPaid + specialAllowancePaid + (structure.conveyance || 0) + totalCustomEarnings;
+
+        // Configurable PF calculation
+        const pfRate = (structure.pfRatePercentage !== undefined ? structure.pfRatePercentage : 12) / 100;
+        const pfCap = structure.pfCapLimit !== undefined ? structure.pfCapLimit : 1800;
+        const isPfCapped = structure.isPfCapped !== false;
+        const rawPf = Math.round((basicPaid || (grossEarnings * 0.5)) * pfRate);
+        const pfDeduction = isPfOn ? (isPfCapped ? Math.min(pfCap, rawPf) : rawPf) : 0;
+
+        // Configurable ESIC calculation
+        const esicRate = (structure.esicRatePercentage !== undefined ? structure.esicRatePercentage : 0.75) / 100;
+        const esicDeduction = isEsicOn ? Math.round(grossEarnings * esicRate) : 0;
+
+        // Configurable PT deduction
+        const configuredPt = structure.professionalTax !== undefined ? structure.professionalTax : 200;
+        const ptDeduction = (isPtOn && grossEarnings > 10000) ? configuredPt : 0;
 
         // Tax Declaration & Monthly TDS
         const taxDecl = await TaxDeclaration.findOne({ employeeId: empId }).lean();
@@ -126,7 +165,7 @@ export async function generateMonthlyPayroll(month, year, employeeId = null) {
             await activeLoan.save();
         }
 
-        const totalDeductions = pfDeduction + esicDeduction + ptDeduction + tdsDeduction + loanEmiDeduction;
+        const totalDeductions = pfDeduction + esicDeduction + ptDeduction + tdsDeduction + loanEmiDeduction + totalCustomDeductions;
         const netPay = Math.max(0, grossEarnings - totalDeductions);
 
         const payrollRecord = await PayrollRun.findOneAndUpdate(
@@ -149,6 +188,10 @@ export async function generateMonthlyPayroll(month, year, employeeId = null) {
                 basicPaid,
                 hraPaid,
                 specialAllowancePaid,
+                customEarnings,
+                customDeductions,
+                totalCustomEarnings,
+                totalCustomDeductions,
                 pfDeduction,
                 esicDeduction,
                 ptDeduction,

@@ -131,6 +131,9 @@ export function generatePayslipHtml(p) {
     const monthNames = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     const monthName = monthNames[p.month] || p.month;
 
+    const customEarningsHtml = (p.customEarnings || []).map(c => `<tr><td>${c.name}</td><td class="text-right">₹${Number(c.amount || 0).toLocaleString('en-IN')}</td></tr>`).join('');
+    const customDeductionsHtml = (p.customDeductions || []).map(c => `<tr><td>${c.name}</td><td class="text-right">₹${Number(c.amount || 0).toLocaleString('en-IN')}</td></tr>`).join('');
+
     return `
 <!DOCTYPE html>
 <html>
@@ -184,6 +187,7 @@ export function generatePayslipHtml(p) {
                     <tr><td>Basic Salary</td><td class="text-right">₹${p.basicPaid.toLocaleString('en-IN')}</td></tr>
                     <tr><td>HRA</td><td class="text-right">₹${p.hraPaid.toLocaleString('en-IN')}</td></tr>
                     <tr><td>Special Allowance</td><td class="text-right">₹${p.specialAllowancePaid.toLocaleString('en-IN')}</td></tr>
+                    ${customEarningsHtml}
                     <tr class="total-row"><td>Gross Earnings</td><td class="text-right">₹${p.grossEarnings.toLocaleString('en-IN')}</td></tr>
                 </tbody>
             </table>
@@ -199,6 +203,7 @@ export function generatePayslipHtml(p) {
                     <tr><td>Professional Tax (PT)</td><td class="text-right">₹${p.ptDeduction.toLocaleString('en-IN')}</td></tr>
                     <tr><td>TDS Tax</td><td class="text-right">₹${p.tdsDeduction.toLocaleString('en-IN')}</td></tr>
                     <tr><td>Salary Loan EMI</td><td class="text-right">₹${p.loanEmiDeduction.toLocaleString('en-IN')}</td></tr>
+                    ${customDeductionsHtml}
                     <tr class="total-row"><td>Total Deductions</td><td class="text-right">₹${p.totalDeductions.toLocaleString('en-IN')}</td></tr>
                 </tbody>
             </table>

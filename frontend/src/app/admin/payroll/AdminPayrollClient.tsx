@@ -21,9 +21,23 @@ import {
   Printer,
   Check,
   X,
-  Edit2
+  Edit2,
+  Trash2,
+  Percent,
+  Coins
 } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
+
+export interface CustomComponentItem {
+  id: string;
+  name: string;
+  type: 'EARNING' | 'DEDUCTION';
+  calculationMode: 'FLAT' | 'PERCENTAGE';
+  value: number;
+  percentageOf?: 'GROSS' | 'BASIC';
+  taxable: boolean;
+  enabled: boolean;
+}
 
 interface Employee {
   _id: string;
@@ -118,14 +132,30 @@ export default function AdminPayrollClient({
   const [calculationType, setCalculationType] = useState<'HOURLY' | 'MONTHLY'>('HOURLY');
   const [taxRegime, setTaxRegime] = useState<'NEW' | 'OLD' | 'NONE' | 'NA'>('NEW');
 
-  // Component & Deduction ON/OFF Toggles
+  // Configurable Statutory Deductions & Custom Items
   const [isPfEligible, setIsPfEligible] = useState<boolean>(true);
+  const [pfRatePct, setPfRatePct] = useState<number>(12);
+  const [isPfCapped, setIsPfCapped] = useState<boolean>(true);
+  const [pfCapLimit, setPfCapLimit] = useState<number>(1800);
+
   const [isEsicEligible, setIsEsicEligible] = useState<boolean>(false);
+  const [esicRatePct, setEsicRatePct] = useState<number>(0.75);
+
   const [isPtEligible, setIsPtEligible] = useState<boolean>(true);
+  const [ptAmount, setPtAmount] = useState<number>(200);
+
   const [isTdsEligible, setIsTdsEligible] = useState<boolean>(true);
   const [isBasicEligible, setIsBasicEligible] = useState<boolean>(true);
   const [isHraEligible, setIsHraEligible] = useState<boolean>(true);
   const [isSpecialAllowanceEligible, setIsSpecialAllowanceEligible] = useState<boolean>(true);
+
+  // Dynamic Custom Components
+  const [customComponents, setCustomComponents] = useState<CustomComponentItem[]>([]);
+  const [newCompName, setNewCompName] = useState<string>('');
+  const [newCompType, setNewCompType] = useState<'EARNING' | 'DEDUCTION'>('EARNING');
+  const [newCompCalcMode, setNewCompCalcMode] = useState<'FLAT' | 'PERCENTAGE'>('FLAT');
+  const [newCompValue, setNewCompValue] = useState<number>(0);
+  const [newCompPercentageOf, setNewCompPercentageOf] = useState<'GROSS' | 'BASIC'>('GROSS');
 
   // Synchronized Bi-Directional Rate Handlers
   const handleYearlyChange = (yearly: number) => {
@@ -281,12 +311,18 @@ export default function AdminPayrollClient({
           calculationType,
           taxRegime,
           isPfEligible,
+          pfRatePercentage: pfRatePct,
+          isPfCapped,
+          pfCapLimit,
           isEsicEligible,
+          esicRatePercentage: esicRatePct,
           isPtEligible,
+          professionalTax: ptAmount,
           isTdsEligible,
           isBasicEligible,
           isHraEligible,
           isSpecialAllowanceEligible,
+          customComponents,
         })
       });
       if (res.success) {
@@ -322,12 +358,18 @@ export default function AdminPayrollClient({
         setCalculationType(s.calculationType || 'HOURLY');
         setTaxRegime(s.regime || s.taxRegime || 'NEW');
         setIsPfEligible(s.isPfEligible !== undefined ? Boolean(s.isPfEligible) : true);
+        setPfRatePct(s.pfRatePercentage !== undefined ? Number(s.pfRatePercentage) : 12);
+        setIsPfCapped(s.isPfCapped !== undefined ? Boolean(s.isPfCapped) : true);
+        setPfCapLimit(s.pfCapLimit !== undefined ? Number(s.pfCapLimit) : 1800);
         setIsEsicEligible(s.isEsicEligible !== undefined ? Boolean(s.isEsicEligible) : false);
+        setEsicRatePct(s.esicRatePercentage !== undefined ? Number(s.esicRatePercentage) : 0.75);
         setIsPtEligible(s.isPtEligible !== undefined ? Boolean(s.isPtEligible) : true);
+        setPtAmount(s.professionalTax !== undefined ? Number(s.professionalTax) : 200);
         setIsTdsEligible(s.isTdsEligible !== undefined ? Boolean(s.isTdsEligible) : true);
         setIsBasicEligible(s.isBasicEligible !== undefined ? Boolean(s.isBasicEligible) : true);
         setIsHraEligible(s.isHraEligible !== undefined ? Boolean(s.isHraEligible) : true);
         setIsSpecialAllowanceEligible(s.isSpecialAllowanceEligible !== undefined ? Boolean(s.isSpecialAllowanceEligible) : true);
+        setCustomComponents(Array.isArray(s.customComponents) ? s.customComponents : []);
       }
     } catch (err) {
       console.error('Error fetching employee structure:', err);
@@ -1134,14 +1176,34 @@ export default function AdminPayrollClient({
 
               {/* Salary Breakdown Live Preview */}
               {(() => {
-                const basic = Math.round(monthlyGross * (basicPct / 100));
-                const hra = Math.round(basic * (hraPct / 100));
-                const specialAllowance = Math.max(0, monthlyGross - basic - hra);
-                const epf = isPfEligible ? Math.min(1800, Math.round(basic * 0.12)) : 0;
-                const esic = isEsicEligible ? Math.round(monthlyGross * 0.0075) : 0;
-                const pt = isPtEligible && monthlyGross > 10000 ? 200 : 0;
-                const totalDeductions = epf + esic + pt;
-                const netTakeHome = Math.max(0, monthlyGross - totalDeductions);
+                const basic = isBasicEligible ? Math.round(monthlyGross * (basicPct / 100)) : 0;
+                const hra = isHraEligible ? Math.round(basic * (hraPct / 100)) : 0;
+
+                // Compute custom components
+                let totalCustomEarnings = 0;
+                let totalCustomDeductions = 0;
+                customComponents.forEach(c => {
+                  if (!c.enabled) return;
+                  let val = 0;
+                  if (c.calculationMode === 'PERCENTAGE') {
+                    const base = c.percentageOf === 'BASIC' ? basic : monthlyGross;
+                    val = Math.round((base * (c.value || 0)) / 100);
+                  } else {
+                    val = Math.round(c.value || 0);
+                  }
+                  if (c.type === 'EARNING') totalCustomEarnings += val;
+                  else totalCustomDeductions += val;
+                });
+
+                const specialAllowance = isSpecialAllowanceEligible ? Math.max(0, monthlyGross - basic - hra) : 0;
+                const effectiveGross = basic + hra + specialAllowance + totalCustomEarnings;
+
+                const rawEpf = Math.round((basic || (effectiveGross * 0.5)) * (pfRatePct / 100));
+                const epf = isPfEligible ? (isPfCapped ? Math.min(pfCapLimit, rawEpf) : rawEpf) : 0;
+                const esic = isEsicEligible ? Math.round(effectiveGross * (esicRatePct / 100)) : 0;
+                const pt = isPtEligible && effectiveGross > 10000 ? ptAmount : 0;
+                const totalDeductions = epf + esic + pt + totalCustomDeductions;
+                const netTakeHome = Math.max(0, effectiveGross - totalDeductions);
 
                 return (
                   <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-700/60 space-y-2">
@@ -1150,11 +1212,11 @@ export default function AdminPayrollClient({
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                       <div className="p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
-                        <span className="text-[10px] text-slate-400 block">Basic Pay ({basicPct}%)</span>
+                        <span className="text-[10px] text-slate-400 block">Basic Pay ({isBasicEligible ? `${basicPct}%` : 'Disabled'})</span>
                         <span className="font-bold text-slate-900 dark:text-white">₹{basic.toLocaleString('en-IN')}</span>
                       </div>
                       <div className="p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
-                        <span className="text-[10px] text-slate-400 block">HRA ({hraPct}% Basic)</span>
+                        <span className="text-[10px] text-slate-400 block">HRA ({isHraEligible ? `${hraPct}% Basic` : 'Disabled'})</span>
                         <span className="font-bold text-slate-900 dark:text-white">₹{hra.toLocaleString('en-IN')}</span>
                       </div>
                       <div className="p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
@@ -1166,6 +1228,13 @@ export default function AdminPayrollClient({
                         <span className="font-bold text-emerald-700 dark:text-emerald-300">₹{netTakeHome.toLocaleString('en-IN')}/mo</span>
                       </div>
                     </div>
+                    {(totalCustomEarnings > 0 || totalCustomDeductions > 0) && (
+                      <div className="flex items-center justify-between text-[11px] px-2 py-1 bg-slate-100 dark:bg-slate-900/60 rounded-lg text-slate-600 dark:text-slate-300 font-medium">
+                        <span>Custom Allowances: <strong className="text-emerald-600">+₹{totalCustomEarnings.toLocaleString('en-IN')}</strong></span>
+                        <span>Custom Deductions: <strong className="text-rose-600">-₹{totalCustomDeductions.toLocaleString('en-IN')}</strong></span>
+                        <span>Effective Gross: <strong>₹{effectiveGross.toLocaleString('en-IN')}</strong></span>
+                      </div>
+                    )}
                   </div>
                 );
               })()}
@@ -1215,8 +1284,8 @@ export default function AdminPayrollClient({
                 </div>
               </div>
 
-              {/* Component & Statutory Deduction Toggles */}
-              <div className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-2">
+              {/* Component & Statutory Deduction Toggles & Rate Customization */}
+              <div className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-3">
                 <label className="block text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">
                   Feature Switches: Enable / Disable Components & Statutory Deductions
                 </label>
@@ -1228,7 +1297,7 @@ export default function AdminPayrollClient({
                       onChange={(e) => setIsPfEligible(e.target.checked)}
                       className="rounded text-rose-600 focus:ring-rose-500 w-4 h-4"
                     />
-                    <span>EPF (12%)</span>
+                    <span>EPF ({pfRatePct}%)</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer bg-slate-50 dark:bg-slate-800/60 p-2 rounded-lg border border-slate-200 dark:border-slate-700/60">
                     <input
@@ -1237,7 +1306,7 @@ export default function AdminPayrollClient({
                       onChange={(e) => setIsEsicEligible(e.target.checked)}
                       className="rounded text-rose-600 focus:ring-rose-500 w-4 h-4"
                     />
-                    <span>ESIC (0.75%)</span>
+                    <span>ESIC ({esicRatePct}%)</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer bg-slate-50 dark:bg-slate-800/60 p-2 rounded-lg border border-slate-200 dark:border-slate-700/60">
                     <input
@@ -1246,7 +1315,7 @@ export default function AdminPayrollClient({
                       onChange={(e) => setIsPtEligible(e.target.checked)}
                       className="rounded text-rose-600 focus:ring-rose-500 w-4 h-4"
                     />
-                    <span>PT (₹200)</span>
+                    <span>PT (₹{ptAmount})</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer bg-slate-50 dark:bg-slate-800/60 p-2 rounded-lg border border-slate-200 dark:border-slate-700/60">
                     <input
@@ -1284,6 +1353,205 @@ export default function AdminPayrollClient({
                     />
                     <span>Special Allowance</span>
                   </label>
+                </div>
+
+                {/* Fine-Tuning Statutory Deduction Values */}
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-700/60 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">
+                      EPF Contribution Rate & Cap
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <input
+                          type="number"
+                          min="0"
+                          max="25"
+                          step="0.5"
+                          value={pfRatePct}
+                          onChange={(e) => setPfRatePct(Number(e.target.value))}
+                          disabled={!isPfEligible}
+                          className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-900 dark:text-white disabled:opacity-50"
+                        />
+                        <span className="absolute right-2 top-2 text-[10px] text-slate-400 font-mono">%</span>
+                      </div>
+                      <label className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-400 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isPfCapped}
+                          onChange={(e) => setIsPfCapped(e.target.checked)}
+                          disabled={!isPfEligible}
+                          className="rounded text-rose-600 focus:ring-rose-500 w-3.5 h-3.5"
+                        />
+                        <span>Cap ₹{pfCapLimit}</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">
+                      ESIC Deduction Rate (%)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        max="10"
+                        step="0.05"
+                        value={esicRatePct}
+                        onChange={(e) => setEsicRatePct(Number(e.target.value))}
+                        disabled={!isEsicEligible}
+                        className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-900 dark:text-white disabled:opacity-50"
+                      />
+                      <span className="absolute right-2 top-2 text-[10px] text-slate-400 font-mono">%</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-1">
+                      Professional Tax (PT ₹ / month)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="50"
+                      value={ptAmount}
+                      onChange={(e) => setPtAmount(Number(e.target.value))}
+                      disabled={!isPtEligible}
+                      className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-900 dark:text-white disabled:opacity-50"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Dynamic Custom Allowances & Deductions Manager */}
+              <div className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
+                    <Coins className="w-3.5 h-3.5" />
+                    Custom Allowances & Deductions
+                  </label>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Add custom company bonuses, allowances or deductions
+                  </span>
+                </div>
+
+                {/* Existing Custom Items List */}
+                {customComponents.length > 0 && (
+                  <div className="space-y-1.5">
+                    {customComponents.map((c, idx) => (
+                      <div
+                        key={c.id || idx}
+                        className="flex items-center justify-between gap-2 p-2 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/60 text-xs"
+                      >
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={c.enabled}
+                            onChange={(e) => {
+                              const updated = [...customComponents];
+                              updated[idx].enabled = e.target.checked;
+                              setCustomComponents(updated);
+                            }}
+                            className="rounded text-rose-600 focus:ring-rose-500 w-3.5 h-3.5"
+                          />
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                            c.type === 'EARNING' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300' : 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
+                          }`}>
+                            {c.type}
+                          </span>
+                          <span className="font-semibold text-slate-900 dark:text-white">{c.name}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="font-mono text-slate-700 dark:text-slate-300">
+                            {c.calculationMode === 'PERCENTAGE'
+                              ? `${c.value}% of ${c.percentageOf || 'GROSS'}`
+                              : `₹${Number(c.value).toLocaleString('en-IN')}`}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCustomComponents(customComponents.filter((_, i) => i !== idx));
+                            }}
+                            className="p-1 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition"
+                            title="Remove"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Add New Custom Component Form */}
+                <div className="p-3 bg-slate-100/70 dark:bg-slate-800/40 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 flex flex-wrap gap-2 items-center text-xs">
+                  <input
+                    type="text"
+                    placeholder="Component Name (e.g. Travel Allowance, Gym)"
+                    value={newCompName}
+                    onChange={(e) => setNewCompName(e.target.value)}
+                    className="flex-1 min-w-[140px] px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  />
+                  <select
+                    value={newCompType}
+                    onChange={(e) => setNewCompType(e.target.value as any)}
+                    className="px-2 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-medium"
+                  >
+                    <option value="EARNING">+ Earning</option>
+                    <option value="DEDUCTION">- Deduction</option>
+                  </select>
+                  <select
+                    value={newCompCalcMode}
+                    onChange={(e) => setNewCompCalcMode(e.target.value as any)}
+                    className="px-2 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-medium"
+                  >
+                    <option value="FLAT">Flat ₹</option>
+                    <option value="PERCENTAGE">% Rate</option>
+                  </select>
+                  {newCompCalcMode === 'PERCENTAGE' && (
+                    <select
+                      value={newCompPercentageOf}
+                      onChange={(e) => setNewCompPercentageOf(e.target.value as any)}
+                      className="px-2 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-medium"
+                    >
+                      <option value="GROSS">% of Gross</option>
+                      <option value="BASIC">% of Basic</option>
+                    </select>
+                  )}
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="Value"
+                    value={newCompValue || ''}
+                    onChange={(e) => setNewCompValue(Number(e.target.value))}
+                    className="w-24 px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!newCompName.trim() || newCompValue <= 0) return;
+                      setCustomComponents([
+                        ...customComponents,
+                        {
+                          id: `comp_${Date.now()}`,
+                          name: newCompName.trim(),
+                          type: newCompType,
+                          calculationMode: newCompCalcMode,
+                          value: newCompValue,
+                          percentageOf: newCompPercentageOf,
+                          taxable: true,
+                          enabled: true
+                        }
+                      ]);
+                      setNewCompName('');
+                      setNewCompValue(0);
+                    }}
+                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-lg transition flex items-center gap-1 shadow-sm"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add
+                  </button>
                 </div>
               </div>
 

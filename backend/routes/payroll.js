@@ -57,6 +57,7 @@ router.post('/structure', requireManagerOrAdmin, async (req, res) => {
         }).lean();
 
         const empCode = user?.employeeId ? String(user.employeeId).toUpperCase() : String(rawEmpId).toUpperCase();
+        const userIdStr = user?._id ? String(user._id) : (String(rawEmpId).length === 24 ? String(rawEmpId) : null);
         const standardHoursPerMonth = parseFloat(req.body.standardHoursPerMonth || req.body.standardHours || 160);
 
         let annualCtc = 600000;
@@ -106,6 +107,12 @@ router.post('/structure', requireManagerOrAdmin, async (req, res) => {
             isBasicEligible: req.body.isBasicEligible !== undefined ? Boolean(req.body.isBasicEligible) : true,
             isHraEligible: req.body.isHraEligible !== undefined ? Boolean(req.body.isHraEligible) : true,
             isSpecialAllowanceEligible: req.body.isSpecialAllowanceEligible !== undefined ? Boolean(req.body.isSpecialAllowanceEligible) : true,
+            customComponents: Array.isArray(req.body.customComponents) ? req.body.customComponents : [],
+            pfRatePercentage: req.body.pfRatePercentage !== undefined ? parseFloat(req.body.pfRatePercentage) : 12,
+            pfCapLimit: req.body.pfCapLimit !== undefined ? parseFloat(req.body.pfCapLimit) : 1800,
+            isPfCapped: req.body.isPfCapped !== undefined ? Boolean(req.body.isPfCapped) : true,
+            esicRatePercentage: req.body.esicRatePercentage !== undefined ? parseFloat(req.body.esicRatePercentage) : 0.75,
+            professionalTax: req.body.professionalTax !== undefined ? parseFloat(req.body.professionalTax) : 200,
         };
 
         const query = {

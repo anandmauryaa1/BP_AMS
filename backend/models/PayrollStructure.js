@@ -18,6 +18,21 @@ const PayrollStructureSchema = new Schema({
     esicEmployee: { type: Number, default: 0 }, // 0.75% of Gross
     esicEmployer: { type: Number, default: 0 }, // 3.25% of Gross
     professionalTax: { type: Number, default: 200 }, // PT slab (e.g. 200/mo)
+    // Custom Allowances & Dynamic Components
+    customComponents: [{
+        id: { type: String },
+        name: { type: String, required: true },
+        type: { type: String, enum: ['EARNING', 'DEDUCTION'], default: 'EARNING' },
+        calculationMode: { type: String, enum: ['FLAT', 'PERCENTAGE'], default: 'FLAT' },
+        value: { type: Number, default: 0 },
+        percentageOf: { type: String, enum: ['GROSS', 'BASIC'], default: 'GROSS' },
+        taxable: { type: Boolean, default: true },
+        enabled: { type: Boolean, default: true }
+    }],
+    pfRatePercentage: { type: Number, default: 12 },
+    pfCapLimit: { type: Number, default: 1800 },
+    isPfCapped: { type: Boolean, default: true },
+    esicRatePercentage: { type: Number, default: 0.75 },
     taxRegime: { type: String, enum: ['OLD', 'NEW', 'NONE', 'NA'], default: 'NEW' },
     isPfEligible: { type: Boolean, default: true },
     isEsicEligible: { type: Boolean, default: false },

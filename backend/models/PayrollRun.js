@@ -21,6 +21,16 @@ const PayrollRunSchema = new Schema({
     basicPaid: { type: Number, required: true },
     hraPaid: { type: Number, required: true },
     specialAllowancePaid: { type: Number, default: 0 },
+    customEarnings: [{
+        name: { type: String },
+        amount: { type: Number, default: 0 }
+    }],
+    customDeductions: [{
+        name: { type: String },
+        amount: { type: Number, default: 0 }
+    }],
+    totalCustomEarnings: { type: Number, default: 0 },
+    totalCustomDeductions: { type: Number, default: 0 },
     overtimePay: { type: Number, default: 0 },
     pfDeduction: { type: Number, default: 0 },
     esicDeduction: { type: Number, default: 0 },
