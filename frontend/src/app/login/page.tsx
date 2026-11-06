@@ -133,12 +133,12 @@ export default function LoginPage() {
       <div className="sm:mx-auto sm:w-full sm:max-w-md px-4">
         {/* Brand Header */}
         <div className="flex justify-center mb-4">
-          <div className="w-12 h-12 rounded-xl bg-rose-600 flex items-center justify-center text-white shadow-lg shadow-rose-600/30">
-            <Video className="w-7 h-7" />
+          <div className="w-16 h-16 rounded-2xl bg-black border border-slate-800 overflow-hidden flex items-center justify-center shadow-xl shadow-rose-600/20 p-1">
+            <img src="/logo.jpg" alt="Blindera Productions" className="w-full h-full object-contain" />
           </div>
         </div>
         <h1 className="text-center text-2xl font-extrabold text-slate-900 dark:text-white tracking-tight">
-          blindarea Production
+          Blindera Productions
         </h1>
         <p className="mt-1 text-center text-xs text-slate-500 dark:text-slate-400">
           Official Team Attendance & Shift Management Portal

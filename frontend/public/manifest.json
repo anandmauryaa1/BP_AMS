@@ -1,7 +1,7 @@
 {
-  "name": "blindarea Production - Attendance Management System",
-  "short_name": "BP AMS",
-  "description": "Production studio enterprise attendance, shift roster, tasks, payroll, and duty tracking system.",
+  "name": "Blindera Productions - Attendance Management System",
+  "short_name": "Blindera AMS",
+  "description": "Production studio enterprise attendance, shift roster, tasks, payroll, and duty tracking system for Blindera Productions.",
   "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",

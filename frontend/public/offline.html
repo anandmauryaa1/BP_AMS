@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Offline — blindarea Production</title>
+  <title>Offline — Blindera Productions</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -27,16 +27,21 @@
       box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
     }
     .icon {
-      width: 64px;
-      height: 64px;
+      width: 72px;
+      height: 72px;
       margin: 0 auto 20px;
-      background: rgba(225, 29, 72, 0.12);
-      color: #e11d48;
-      border-radius: 50%;
+      background: #000000;
+      border: 1px solid #27272a;
+      border-radius: 16px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 28px;
+      overflow: hidden;
+    }
+    .icon img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
     }
     h1 {
       font-size: 20px;
@@ -69,9 +74,11 @@
 </head>
 <body>
   <div class="card">
-    <div class="icon">⚡</div>
+    <div class="icon">
+      <img src="/logo.jpg" alt="Blindera Productions" />
+    </div>
     <h1>You're Offline</h1>
-    <p>blindarea Production Attendance System requires an active internet connection to synchronize with studio servers. Please check your network and retry.</p>
+    <p>Blindera Productions Attendance System requires an active internet connection to synchronize with studio servers. Please check your network and retry.</p>
     <button onclick="window.location.reload()">Retry Connection</button>
   </div>
 </body>

@@ -107,36 +107,40 @@ export const EmployeePerformanceSalaryCard: React.FC<EmployeePerformanceSalaryCa
     <div className="space-y-6">
       {/* Top Filter & Actions Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900/90 border border-slate-800 rounded-2xl p-4 backdrop-blur-xl">
-        <div className="flex items-center gap-3">
-          <Calendar className="w-5 h-5 text-rose-400" />
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Target Month:</span>
-          <select
-            value={month}
-            onChange={(e) => setMonth(parseInt(e.target.value, 10))}
-            className="bg-slate-800 text-white text-xs font-semibold rounded-lg px-3 py-1.5 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-rose-500"
-          >
-            {monthNames.map((m, idx) => (
-              <option key={m} value={idx + 1}>
-                {m}
-              </option>
-            ))}
-          </select>
-          <select
-            value={year}
-            onChange={(e) => setYear(parseInt(e.target.value, 10))}
-            className="bg-slate-800 text-white text-xs font-semibold rounded-lg px-3 py-1.5 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-rose-500"
-          >
-            {[2025, 2026, 2027].map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-rose-400 shrink-0" />
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Target Month:</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={month}
+              onChange={(e) => setMonth(parseInt(e.target.value, 10))}
+              className="bg-slate-800 text-white text-xs font-semibold rounded-lg px-2.5 sm:px-3 py-1.5 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-rose-500"
+            >
+              {monthNames.map((m, idx) => (
+                <option key={m} value={idx + 1}>
+                  {m}
+                </option>
+              ))}
+            </select>
+            <select
+              value={year}
+              onChange={(e) => setYear(parseInt(e.target.value, 10))}
+              className="bg-slate-800 text-white text-xs font-semibold rounded-lg px-2.5 sm:px-3 py-1.5 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-rose-500"
+            >
+              {[2025, 2026, 2027].map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <button
           onClick={handlePrint}
-          className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold transition-all shadow-md shadow-rose-600/20"
+          className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold transition-all shadow-md shadow-rose-600/20"
         >
           <Printer className="w-4 h-4" />
           <span>Print / Save PDF Report</span>
@@ -144,41 +148,45 @@ export const EmployeePerformanceSalaryCard: React.FC<EmployeePerformanceSalaryCa
       </div>
 
       {/* Employee Details Profile Card */}
-      <div className="bg-gradient-to-r from-slate-900 via-zinc-900 to-slate-900 border border-slate-800 rounded-2xl p-6 backdrop-blur-xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="flex items-center space-x-4">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-rose-600 to-rose-700 flex items-center justify-center text-white font-extrabold text-2xl shadow-lg shadow-rose-600/20 border border-rose-400/30">
-            {employee.name ? employee.name.charAt(0).toUpperCase() : <User className="w-8 h-8" />}
+      <div className="bg-gradient-to-r from-slate-900 via-zinc-900 to-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 backdrop-blur-xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-5 sm:gap-6">
+        <div className="flex items-start sm:items-center gap-3.5 sm:gap-4 min-w-0">
+          <div className="w-12 h-12 sm:w-16 sm:h-16 aspect-square rounded-xl sm:rounded-2xl bg-gradient-to-br from-rose-600 to-rose-700 flex items-center justify-center text-white font-extrabold text-xl sm:text-2xl shadow-lg shadow-rose-600/20 border border-rose-400/30 shrink-0 self-start sm:self-center">
+            {employee.name ? employee.name.charAt(0).toUpperCase() : <User className="w-6 h-6 sm:w-8 sm:h-8" />}
           </div>
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl font-bold text-white tracking-tight">{employee.name}</h2>
-              <span className="text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 px-2 py-0.5 rounded-full border border-rose-500/30 uppercase">
+          <div className="space-y-1 min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight truncate">{employee.name}</h2>
+              <span className="text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 px-2 py-0.5 rounded-full border border-rose-500/30 uppercase shrink-0">
                 {employee.employeeId}
               </span>
             </div>
-            <p className="text-xs text-slate-400 font-medium flex items-center gap-2">
-              <span>{employee.designation}</span>
-              <span>•</span>
-              <span className="text-slate-300 font-semibold">{employee.department}</span>
-              <span>•</span>
-              <span className="text-slate-400">{employee.email}</span>
-            </p>
+            <div className="text-xs text-slate-400 font-medium flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="whitespace-nowrap">{employee.designation}</span>
+              <span className="text-slate-600">•</span>
+              <span className="text-slate-300 font-semibold whitespace-nowrap">{employee.department}</span>
+              {employee.email && (
+                <>
+                  <span className="text-slate-600 hidden sm:inline">•</span>
+                  <span className="text-slate-400 break-all w-full sm:w-auto block sm:inline">{employee.email}</span>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
         {/* Status Pills */}
-        <div className="flex items-center gap-3">
-          <div className="bg-slate-800/80 border border-slate-700/80 px-4 py-2.5 rounded-xl text-center">
-            <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Performance Score</div>
-            <div className="text-lg font-black text-rose-400 flex items-center justify-center gap-1">
-              <Zap className="w-4 h-4 fill-rose-400" />
+        <div className="grid grid-cols-2 sm:flex sm:items-center gap-2.5 sm:gap-3 w-full md:w-auto">
+          <div className="bg-slate-800/80 border border-slate-700/80 px-3.5 py-2.5 rounded-xl text-center flex-1 sm:flex-initial">
+            <div className="text-[9px] sm:text-[10px] uppercase font-bold text-slate-400 tracking-wider">Performance Score</div>
+            <div className="text-base sm:text-lg font-black text-rose-400 flex items-center justify-center gap-1 mt-0.5">
+              <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-rose-400" />
               {performance.performanceScore}%
             </div>
           </div>
-          <div className="bg-slate-800/80 border border-slate-700/80 px-4 py-2.5 rounded-xl text-center">
-            <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Rating Grade</div>
-            <div className="text-sm font-bold text-emerald-400 flex items-center justify-center gap-1">
-              <Award className="w-4 h-4" />
+          <div className="bg-slate-800/80 border border-slate-700/80 px-3.5 py-2.5 rounded-xl text-center flex-1 sm:flex-initial">
+            <div className="text-[9px] sm:text-[10px] uppercase font-bold text-slate-400 tracking-wider">Rating Grade</div>
+            <div className="text-xs sm:text-sm font-bold text-emerald-400 flex items-center justify-center gap-1 mt-0.5">
+              <Award className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               {performance.ratingLabel}
             </div>
           </div>
@@ -251,7 +259,7 @@ export const EmployeePerformanceSalaryCard: React.FC<EmployeePerformanceSalaryCa
             <div className="text-[10px] font-semibold uppercase text-blue-400">Effective Paid Days</div>
             <div className="text-lg font-extrabold text-blue-400 mt-1">{attendance.effectivePaidDays} Days</div>
           </div>
-          <div className="p-3.5 rounded-xl bg-slate-800/60 border border-slate-700/50">
+          <div className="p-3.5 rounded-xl bg-slate-800/60 border border-slate-700/50 col-span-2 sm:col-span-1">
             <div className="text-[10px] font-semibold uppercase text-slate-400">Pay Ratio</div>
             <div className="text-lg font-extrabold text-purple-400 mt-1">
               {Math.round((attendance.effectivePaidDays / attendance.totalDaysInMonth) * 100)}%
@@ -285,18 +293,18 @@ export const EmployeePerformanceSalaryCard: React.FC<EmployeePerformanceSalaryCa
         </div>
 
         {/* Grand Net Payable Banner */}
-        <div className="bg-gradient-to-r from-rose-950/60 via-slate-900 to-rose-950/60 border border-rose-500/30 rounded-2xl p-6 text-center space-y-2 shadow-inner">
-          <div className="text-xs font-semibold uppercase tracking-wider text-rose-300">
+        <div className="bg-gradient-to-r from-rose-950/60 via-slate-900 to-rose-950/60 border border-rose-500/30 rounded-2xl p-4 sm:p-6 text-center space-y-2 shadow-inner">
+          <div className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-rose-300">
             Estimated Net Payable Salary ({monthNames[month - 1]} {year})
           </div>
-          <div className="text-4xl font-black text-white tracking-tight">
+          <div className="text-3xl sm:text-4xl font-black text-white tracking-tight">
             ₹{salary.netPayable.toLocaleString('en-IN')}
           </div>
-          <div className="text-xs text-slate-400 flex items-center justify-center gap-4 mt-2">
+          <div className="text-xs text-slate-400 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 mt-2">
             <span>Base CTC: ₹{salary.annualCtc.toLocaleString('en-IN')}/yr</span>
-            <span>•</span>
+            <span className="text-slate-600 hidden xs:inline">•</span>
             <span>Monthly Gross: ₹{salary.baseMonthlyGross.toLocaleString('en-IN')}</span>
-            <span>•</span>
+            <span className="text-slate-600 hidden xs:inline">•</span>
             <span className="text-rose-400 font-semibold">LWP Loss: -₹{salary.lopDeduction.toLocaleString('en-IN')}</span>
           </div>
         </div>

@@ -427,14 +427,14 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
                 href={isStaffManagerOrAdmin ? '/admin/dashboard' : '/dashboard'}
                 className="flex items-center space-x-2.5 group"
               >
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-rose-600 to-rose-700 flex items-center justify-center text-white shadow-md shadow-rose-600/20 group-hover:scale-105 transition-all">
-                  <Video className="w-5 h-5" />
+                <div className="w-9 h-9 rounded-xl bg-black border border-slate-800 overflow-hidden flex items-center justify-center shadow-md shadow-rose-950/20 group-hover:scale-105 transition-all shrink-0">
+                  <img src="/logo.jpg" alt="Blindera Productions" className="w-full h-full object-contain" />
                 </div>
                 <div className="flex flex-col">
                   <span className="font-bold text-slate-900 dark:text-white text-base leading-tight tracking-tight flex items-center gap-1.5">
-                    blindarea
+                    Blindera
                     <span className="text-[10px] font-semibold uppercase tracking-wider bg-rose-500/10 text-rose-600 dark:text-rose-400 px-2 py-0.5 rounded-full border border-rose-500/20">
-                      Production
+                      Productions
                     </span>
                   </span>
                   <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium hidden sm:inline">
@@ -681,11 +681,11 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
             {/* Drawer Header */}
             <div className="p-4 border-b border-slate-800 flex items-center justify-between">
               <div className="flex items-center space-x-2.5">
-                <div className="w-8 h-8 rounded-lg bg-rose-600 flex items-center justify-center text-white shadow-sm shadow-rose-600/30">
-                  <Video className="w-4 h-4" />
+                <div className="w-8 h-8 rounded-lg bg-black border border-slate-800 overflow-hidden flex items-center justify-center shrink-0">
+                  <img src="/logo.jpg" alt="Blindera Productions" className="w-full h-full object-contain" />
                 </div>
                 <div>
-                  <div className="font-bold text-white text-sm tracking-tight leading-none">blindarea Production</div>
+                  <div className="font-bold text-white text-sm tracking-tight leading-none">Blindera Productions</div>
                   <div className="text-[10px] text-slate-400 font-medium mt-0.5">Media & Attendance</div>
                 </div>
               </div>

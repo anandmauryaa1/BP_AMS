@@ -53,7 +53,9 @@ export async function generateDailyReport(employeeId, dateStr, options) {
         presenceMinutes = attendanceDoc.totalWorkingMinutes + attendanceDoc.totalBreakMinutes;
         breakMinutes = attendanceDoc.totalBreakMinutes;
         workingMinutes = attendanceDoc.totalWorkingMinutes;
-        if (checkIn) {
+        if (attendanceDoc.lateMinutes !== undefined) {
+            lateMinutes = attendanceDoc.lateMinutes;
+        } else if (checkIn) {
             const checkInDate = new Date(checkIn);
             const scheduledCheckIn = new Date(checkInDate);
             scheduledCheckIn.setHours(9, 30, 0, 0);

@@ -6,14 +6,14 @@ import { PwaInstallPrompt } from '@/components/PwaInstallPrompt';
 import { RealTimeProvider } from '@/context/RealTimeContext';
 
 export const metadata: Metadata = {
-  title: 'blindarea Production - Attendance Management System',
-  description: 'Lightweight & secure Office Attendance Management System for blindarea Production',
+  title: 'Blindera Productions - Attendance & Production Management',
+  description: 'Official Attendance, Shift Roster, Tasks, and Payroll Management System for Blindera Productions',
   manifest: '/manifest.json',
-  applicationName: 'BP AMS',
+  applicationName: 'Blindera AMS',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'BP AMS',
+    title: 'Blindera AMS',
   },
   formatDetection: {
     telephone: false,

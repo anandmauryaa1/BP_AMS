@@ -34,32 +34,50 @@ export function calculateWorkingMinutes(checkIn, checkOut, totalBreakMinutes) {
     return Math.max(0, totalElapsedMinutes - totalBreakMinutes);
 }
 
-export function calculateLateCheckIn(checkInTime = new Date(), shiftStartTime = '09:30', graceMinutes = 15) {
+export function calculateLateCheckIn(checkInTime = new Date(), shiftStartTime = '09:30', graceMinutes = 15, timeZone = process.env.APP_TIMEZONE || 'Asia/Kolkata') {
     const checkInDate = new Date(checkInTime);
     const [hoursStr, minutesStr] = (shiftStartTime || '09:30').split(':');
     const shiftHours = parseInt(hoursStr, 10) || 0;
     const shiftMins = parseInt(minutesStr, 10) || 0;
 
-    const scheduledStart = new Date(
-        checkInDate.getFullYear(),
-        checkInDate.getMonth(),
-        checkInDate.getDate(),
-        shiftHours,
-        shiftMins,
-        0,
-        0
-    );
+    let checkInHours, checkInMinutes;
+    if (timeZone) {
+        try {
+            const formatter = new Intl.DateTimeFormat('en-US', {
+                timeZone,
+                hour: 'numeric',
+                minute: 'numeric',
+                hour12: false,
+            });
+            const parts = formatter.formatToParts(checkInDate);
+            for (const part of parts) {
+                if (part.type === 'hour') checkInHours = parseInt(part.value, 10);
+                if (part.type === 'minute') checkInMinutes = parseInt(part.value, 10);
+            }
+        } catch (_) {
+            checkInHours = checkInDate.getHours();
+            checkInMinutes = checkInDate.getMinutes();
+        }
+    } else {
+        checkInHours = checkInDate.getHours();
+        checkInMinutes = checkInDate.getMinutes();
+    }
 
-    const graceMs = (Number(graceMinutes) || 0) * 60 * 1000;
-    const graceDeadline = new Date(scheduledStart.getTime() + graceMs);
+    if (checkInHours === 24) checkInHours = 0;
 
-    if (checkInDate.getTime() > graceDeadline.getTime()) {
-        const lateMinutes = Math.max(0, Math.floor((checkInDate.getTime() - scheduledStart.getTime()) / (1000 * 60)));
+    const checkInTotalMins = (checkInHours !== undefined ? checkInHours : checkInDate.getHours()) * 60 +
+        (checkInMinutes !== undefined ? checkInMinutes : checkInDate.getMinutes());
+    const shiftTotalMins = shiftHours * 60 + shiftMins;
+    const graceMins = Number(graceMinutes) || 0;
+
+    const diffMinutes = checkInTotalMins - shiftTotalMins;
+
+    if (diffMinutes > graceMins) {
         return {
             isLate: true,
-            lateMinutes,
+            lateMinutes: Math.max(0, diffMinutes),
             scheduledShiftStart: shiftStartTime,
-            lateGraceMinutes: Number(graceMinutes) || 0,
+            lateGraceMinutes: graceMins,
         };
     }
 
@@ -67,7 +85,7 @@ export function calculateLateCheckIn(checkInTime = new Date(), shiftStartTime = 
         isLate: false,
         lateMinutes: 0,
         scheduledShiftStart: shiftStartTime,
-        lateGraceMinutes: Number(graceMinutes) || 0,
+        lateGraceMinutes: graceMins,
     };
 }
 
