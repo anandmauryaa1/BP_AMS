@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { Navbar } from '@/components/Navbar';
 import { MobileNav } from '@/components/MobileNav';
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
@@ -347,22 +348,33 @@ export default function EmployeeDashboardClient({
         {/* Top Header Card */}
         <div className="bg-slate-900 dark:bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-6 shadow-sm text-white">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wider text-rose-400 bg-rose-950/80 px-2 py-0.5 rounded border border-rose-800/60">
-                  {user?.department || 'blindarea Production'}
-                </span>
-                {user?.employeeId && (
-                  <span className="text-xs font-mono text-slate-400">ID: {user.employeeId}</span>
-                )}
+            <div className="flex items-center gap-4">
+              <Link href="/profile" className="shrink-0 group" title="View & update your profile photo">
+                <div className="w-13 h-13 sm:w-14 sm:h-14 aspect-square rounded-2xl overflow-hidden border-2 border-slate-700 bg-slate-800 flex items-center justify-center font-extrabold text-xl text-rose-400 shadow-lg shadow-rose-950/40 group-hover:border-rose-500 transition-all">
+                  {user?.avatar ? (
+                    <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <span>{(user?.name || 'U').charAt(0).toUpperCase()}</span>
+                  )}
+                </div>
+              </Link>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-rose-400 bg-rose-950/80 px-2 py-0.5 rounded border border-rose-800/60">
+                    {user?.department || 'Blindera Productions'}
+                  </span>
+                  {user?.employeeId && (
+                    <span className="text-xs font-mono text-slate-400">ID: {user.employeeId}</span>
+                  )}
+                </div>
+                <h1 className="text-xl sm:text-2xl font-bold mt-1 text-white tracking-tight flex items-center gap-2">
+                  {getTimeBasedGreeting(currentTime || undefined)}, {user?.name ? user.name : <Skeleton className="h-7 w-40 bg-slate-700/70" />}
+                </h1>
+                <p className="text-xs text-slate-300 mt-0.5 flex items-center gap-1.5" suppressHydrationWarning>
+                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                  {currentTime ? formatDate(currentTime) : ''}
+                </p>
               </div>
-              <h1 className="text-xl sm:text-2xl font-bold mt-1 text-white tracking-tight flex items-center gap-2">
-                {getTimeBasedGreeting(currentTime || undefined)}, {user?.name ? user.name : <Skeleton className="h-7 w-40 bg-slate-700/70" />}
-              </h1>
-              <p className="text-xs text-slate-300 mt-0.5 flex items-center gap-1.5" suppressHydrationWarning>
-                <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                {currentTime ? formatDate(currentTime) : ''}
-              </p>
             </div>
 
             {/* Live Studio Clock */}
@@ -612,7 +624,7 @@ export default function EmployeeDashboardClient({
         )}
 
         {/* 3. Today's Production Work Queue (Daily Plan) */}
-        <Card className="border-slate-200 dark:border-slate-800 shadow-sm mb-6">
+        <Card className="border-slate-200 dark:border-slate-800 shadow-sm mb-6 overflow-hidden">
           <CardHeader>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -621,98 +633,115 @@ export default function EmployeeDashboardClient({
                   Today&apos;s Assigned Work Queue
                 </CardTitle>
               </div>
-              <span className="text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-0.5 rounded-full font-mono">
-                {myQueue.length + myTasksToday.length} items
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-slate-400 md:hidden flex items-center gap-1 font-medium bg-slate-100 dark:bg-slate-800/80 px-2 py-0.5 rounded-full">
+                  ⇄ Scrollable
+                </span>
+                <span className="text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-0.5 rounded-full font-mono">
+                  {myQueue.length + myTasksToday.length} items
+                </span>
+              </div>
             </div>
             <CardDescription className="text-xs">
               Directives dispatched for you today from manager daily planning.
             </CardDescription>
           </CardHeader>
 
-          {/* Daily Plan Specific Assignments */}
-          {myQueue.length > 0 && (
-            <div className="divide-y divide-slate-100 dark:divide-slate-800 border-b border-slate-100 dark:border-slate-800 mb-2">
-              <div className="bg-slate-50 dark:bg-slate-800/60 px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                Daily Plan Schedule
-              </div>
-              {myQueue.map((item, idx) => (
-                <div key={idx} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-slate-900 dark:text-white text-xs">
-                        {item.taskTitle || item.projectTitle || 'Production Assignment'}
-                      </span>
-                      {item.timeSlot && (
-                        <span className="text-[10px] font-mono bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-100 dark:border-rose-900/50 px-1.5 py-0.5 rounded">
-                          {item.timeSlot}
-                        </span>
-                      )}
-                      <Badge status={item.priority || 'MEDIUM'} />
-                    </div>
-                    {item.notes && <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">{item.notes}</p>}
+          {/* Horizontally scrollable wrapper on mobile and tablet */}
+          <div className="overflow-x-auto w-full scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700">
+            <div className="min-w-[620px] lg:min-w-full">
+              {/* Daily Plan Specific Assignments */}
+              {myQueue.length > 0 && (
+                <div className="divide-y divide-slate-100 dark:divide-slate-800 border-b border-slate-100 dark:border-slate-800 mb-2">
+                  <div className="bg-slate-50 dark:bg-slate-800/60 px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                    Daily Plan Schedule
                   </div>
+                  {myQueue.map((item, idx) => (
+                    <div key={idx} className="p-4 flex items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                          <span className="font-bold text-slate-900 dark:text-white text-xs">
+                            {item.taskTitle || item.projectTitle || 'Production Assignment'}
+                          </span>
+                          {item.timeSlot && (
+                            <span className="text-[10px] font-mono bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-100 dark:border-rose-900/50 px-1.5 py-0.5 rounded shrink-0">
+                              {item.timeSlot}
+                            </span>
+                          )}
+                          <Badge status={item.priority || 'MEDIUM'} />
+                        </div>
+                        {item.notes && <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">{item.notes}</p>}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
+
+              {/* Active Production Tasks */}
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                {myTasksToday.length === 0 && myQueue.length === 0 ? (
+                  <div className="p-8 text-center text-slate-400 text-xs">
+                    No active tasks assigned to you for today.
+                  </div>
+                ) : (
+                  myTasksToday.map((task) => (
+                    <div key={task._id} className="p-4 flex items-center justify-between gap-4 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                          <span className="text-[10px] font-mono font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded uppercase shrink-0">
+                            {task.taskType}
+                          </span>
+                          <span className="font-bold text-slate-900 dark:text-white text-xs whitespace-normal">{task.title}</span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <Badge status={task.status} />
+                            <Badge status={task.priority} />
+                          </div>
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5 flex items-center gap-2 flex-wrap">
+                          <span>
+                            Project: <span className="font-semibold text-slate-700 dark:text-slate-300">{(task.projectId as any)?.title || 'Master Production'}</span>
+                          </span>
+                          {task.dueDate && (
+                            <>
+                              <span className="text-slate-300 dark:text-slate-700">•</span>
+                              <span className="font-mono">Due: {formatDate(task.dueDate)}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Task Status Quick Selector */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {task.status !== 'IN_PROGRESS' && (
+                          <button
+                            onClick={() => handleUpdateTaskStatus(task._id, 'IN_PROGRESS')}
+                            className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors"
+                          >
+                            Start
+                          </button>
+                        )}
+                        {task.status !== 'READY_FOR_REVIEW' && (
+                          <button
+                            onClick={() => handleUpdateTaskStatus(task._id, 'READY_FOR_REVIEW')}
+                            className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 transition-colors"
+                          >
+                            Submit Review
+                          </button>
+                        )}
+                        {task.status !== 'COMPLETED' && (
+                          <button
+                            onClick={() => handleUpdateTaskStatus(task._id, 'COMPLETED')}
+                            className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 transition-colors"
+                          >
+                            Complete
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
-          )}
-
-          {/* Active Production Tasks */}
-          <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            {myTasksToday.length === 0 && myQueue.length === 0 ? (
-              <div className="p-8 text-center text-slate-400 text-xs">
-                No active tasks assigned to you for today.
-              </div>
-            ) : (
-              myTasksToday.map((task) => (
-                <div key={task._id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-mono font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-1.5 py-0.5 rounded uppercase">
-                        {task.taskType}
-                      </span>
-                      <span className="font-bold text-slate-900 dark:text-white text-xs">{task.title}</span>
-                      <Badge status={task.status} />
-                      <Badge status={task.priority} />
-                    </div>
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                      Project: <span className="font-semibold text-slate-700 dark:text-slate-300">{(task.projectId as any)?.title || 'Master Production'}</span>
-                      {task.dueDate && (
-                        <span className="ml-2 font-mono">Due: {formatDate(task.dueDate)}</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Task Status Quick Selector */}
-                  <div className="flex items-center gap-1.5 self-end sm:self-auto">
-                    {task.status !== 'IN_PROGRESS' && (
-                      <button
-                        onClick={() => handleUpdateTaskStatus(task._id, 'IN_PROGRESS')}
-                        className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors"
-                      >
-                        Start
-                      </button>
-                    )}
-                    {task.status !== 'READY_FOR_REVIEW' && (
-                      <button
-                        onClick={() => handleUpdateTaskStatus(task._id, 'READY_FOR_REVIEW')}
-                        className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-amber-50 dark:bg-amber-950/60 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 transition-colors"
-                      >
-                        Submit Review
-                      </button>
-                    )}
-                    {task.status !== 'COMPLETED' && (
-                      <button
-                        onClick={() => handleUpdateTaskStatus(task._id, 'COMPLETED')}
-                        className="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 transition-colors"
-                      >
-                        Complete
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))
-            )}
           </div>
         </Card>
 

@@ -12,6 +12,7 @@ import { User, Mail, Building2, Shield, Lock, Calendar, Key } from 'lucide-react
 import { SessionPayload } from '@/types';
 import { formatDate } from '@/lib/utils';
 import { PushNotificationManager } from '@/components/PushNotificationManager';
+import { ProfilePhotoUploader } from '@/components/profile/ProfilePhotoUploader';
 
 interface Props {
   initialProfile?: any;
@@ -70,15 +71,19 @@ export default function EmployeeProfileClient({ initialProfile = null }: Props) 
           <div className="space-y-6">
             {/* Main Info Card */}
             <Card className="border-slate-200 dark:border-slate-800">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-base font-bold">{user?.name}</CardTitle>
-                    <CardDescription className="text-xs">
-                      Official Production Staff Record
-                    </CardDescription>
+              <CardHeader className="pb-4 border-b border-slate-100 dark:border-slate-800/80">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <ProfilePhotoUploader
+                    currentAvatar={user?.avatar}
+                    userName={user?.name}
+                    size="md"
+                    onPhotoUpdated={(newPhoto) => {
+                      setUser((prev: any) => ({ ...prev, avatar: newPhoto }));
+                    }}
+                  />
+                  <div className="self-end sm:self-center">
+                    <Badge status={user?.status} />
                   </div>
-                  <Badge status={user?.status} />
                 </div>
               </CardHeader>
 

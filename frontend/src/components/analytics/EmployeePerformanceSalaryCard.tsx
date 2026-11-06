@@ -150,8 +150,14 @@ export const EmployeePerformanceSalaryCard: React.FC<EmployeePerformanceSalaryCa
       {/* Employee Details Profile Card */}
       <div className="bg-gradient-to-r from-slate-900 via-zinc-900 to-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 backdrop-blur-xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-5 sm:gap-6">
         <div className="flex items-start sm:items-center gap-3.5 sm:gap-4 min-w-0">
-          <div className="w-12 h-12 sm:w-16 sm:h-16 aspect-square rounded-xl sm:rounded-2xl bg-gradient-to-br from-rose-600 to-rose-700 flex items-center justify-center text-white font-extrabold text-xl sm:text-2xl shadow-lg shadow-rose-600/20 border border-rose-400/30 shrink-0 self-start sm:self-center">
-            {employee.name ? employee.name.charAt(0).toUpperCase() : <User className="w-6 h-6 sm:w-8 sm:h-8" />}
+          <div className="w-12 h-12 sm:w-16 sm:h-16 aspect-square rounded-xl sm:rounded-2xl bg-gradient-to-br from-rose-600 to-rose-700 flex items-center justify-center text-white font-extrabold text-xl sm:text-2xl shadow-lg shadow-rose-600/20 border border-rose-400/30 shrink-0 self-start sm:self-center overflow-hidden">
+            {employee.avatar ? (
+              <img src={employee.avatar} alt={employee.name} className="w-full h-full object-cover rounded-xl sm:rounded-2xl" />
+            ) : employee.name ? (
+              employee.name.charAt(0).toUpperCase()
+            ) : (
+              <User className="w-6 h-6 sm:w-8 sm:h-8" />
+            )}
           </div>
           <div className="space-y-1 min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">

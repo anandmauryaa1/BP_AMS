@@ -308,6 +308,7 @@ const handleEmployeePerformanceSalary = async (req, res) => {
                     employeeId: user.employeeId,
                     name: user.name,
                     email: user.email,
+                    avatar: user.avatar || null,
                     phone: user.phone || 'N/A',
                     department: user.department || 'Production',
                     designation: user.designation || 'Team Member',

@@ -7,7 +7,7 @@ import { connectToDatabase } from '../db.js';
 export const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY ||
     'BK7Xg38hJND12d_9QDFs6aX-LZlftJ1a7wwog2f88LxtyUcii0oNPUTchgRTMbTDl73Q5ptrQB2cOobIifNRgUw';
 export const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || 'odUH2N57oBzSRWg2C-bHgXyY66pUv4HhHPl-8XtgZ-Q';
-export const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:notifications@blindareaproduction.com';
+export const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:notifications@blinderaproductions.com';
 
 
 // Initialize WebPush VAPID configuration

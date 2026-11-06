@@ -176,6 +176,7 @@ router.get('/me', authenticateToken, async (req, res) => {
             username: user.username,
             name: user.name,
             email: user.email,
+            avatar: user.avatar || null,
             department: user.department,
             role: user.role,
             status: user.status,
@@ -234,6 +235,7 @@ router.get('/initial-state', authenticateToken, async (req, res) => {
             username: user.username,
             name: user.name,
             email: user.email,
+            avatar: user.avatar || null,
             department: user.department,
             role: user.role,
             status: user.status,
@@ -395,4 +397,33 @@ const handleChangePassword = async (req, res) => {
 
 router.put('/change-password', authenticateToken, handleChangePassword);
 router.post('/change-password', authenticateToken, handleChangePassword);
+
+// Upload, update, or remove profile photo for current user
+const handleProfilePhoto = async (req, res) => {
+    try {
+        const { photo } = req.body;
+        await connectToDatabase();
+        const userId = req.user?.userId || req.user?._id;
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ success: false, error: 'User not found' });
+        }
+
+        user.avatar = photo && typeof photo === 'string' && photo.trim().length > 0 ? photo.trim() : null;
+        await user.save();
+
+        return res.json({
+            success: true,
+            message: user.avatar ? 'Profile photo updated successfully!' : 'Profile photo removed successfully!',
+            data: { avatar: user.avatar }
+        });
+    } catch (error) {
+        console.error('[API:ProfilePhoto] Error:', error);
+        return res.status(500).json({ success: false, error: 'Failed to update profile photo' });
+    }
+};
+
+router.put('/profile-photo', authenticateToken, handleProfilePhoto);
+router.post('/profile-photo', authenticateToken, handleProfilePhoto);
+
 export default router;

@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Navbar } from '@/components/Navbar';
@@ -72,7 +72,7 @@ export default function AdminReportsClient() {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `blindarea_Production_Attendance_Report_${startDate}_to_${endDate}.csv`);
+    link.setAttribute('download', `Blindera_Productions_Attendance_Report_${startDate}_to_${endDate}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

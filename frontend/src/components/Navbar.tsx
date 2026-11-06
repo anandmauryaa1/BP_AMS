@@ -628,9 +628,18 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
                   <div className="flex items-center space-x-2">
                     <Link
                       href={isStaffManagerOrAdmin ? '/admin/profile' : '/profile'}
-                      className="text-xs font-bold text-slate-800 dark:text-slate-100 hover:text-rose-600 dark:hover:text-rose-400 transition-colors hidden sm:block whitespace-nowrap"
+                      className="flex items-center gap-1.5 group/user hidden sm:flex"
                     >
-                      {displayUser.name || displayUser.username || 'Admin'}
+                      <div className="w-7 h-7 rounded-lg overflow-hidden border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-bold text-xs text-rose-600 dark:text-rose-400 shrink-0">
+                        {displayUser.avatar ? (
+                          <img src={displayUser.avatar} alt={displayUser.name || 'User'} className="w-full h-full object-cover" />
+                        ) : (
+                          <span>{(displayUser.name || displayUser.username || 'U').charAt(0).toUpperCase()}</span>
+                        )}
+                      </div>
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-100 group-hover/user:text-rose-600 dark:group-hover/user:text-rose-400 transition-colors whitespace-nowrap">
+                        {displayUser.name || displayUser.username || 'Admin'}
+                      </span>
                     </Link>
 
                     {isStaffManagerOrAdmin ? (
@@ -702,14 +711,25 @@ export const Navbar: React.FC<NavbarProps> = ({ user }) => {
             {/* User Profile Summary Card */}
             {currentUser && (
               <div className="p-4 bg-slate-800/60 border-b border-slate-800">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[10px] font-mono text-rose-400 font-semibold uppercase tracking-wider">
-                    {currentUser.employeeId}
-                  </span>
-                  <Badge status={currentUser.role as any} />
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl overflow-hidden border border-slate-700 bg-slate-900 flex items-center justify-center font-bold text-sm text-rose-400 shrink-0">
+                    {currentUser.avatar ? (
+                      <img src={currentUser.avatar} alt={currentUser.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <span>{(currentUser.name || currentUser.username || 'U').charAt(0).toUpperCase()}</span>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="text-[10px] font-mono text-rose-400 font-semibold uppercase tracking-wider">
+                        {currentUser.employeeId}
+                      </span>
+                      <Badge status={currentUser.role as any} />
+                    </div>
+                    <div className="font-bold text-white text-sm truncate">{currentUser.name}</div>
+                    <div className="text-xs text-slate-400 truncate">@{currentUser.username}</div>
+                  </div>
                 </div>
-                <div className="font-bold text-white text-sm truncate">{currentUser.name}</div>
-                <div className="text-xs text-slate-400 truncate">@{currentUser.username}</div>
               </div>
             )}
 

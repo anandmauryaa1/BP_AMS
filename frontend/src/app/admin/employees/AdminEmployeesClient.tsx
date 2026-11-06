@@ -392,9 +392,20 @@ export default function AdminEmployeesClient({ initialEmployees = [] }: Props) {
                   employees.map((emp) => (
                     <tr key={emp._id} className="hover:bg-slate-50/80 dark:hover:bg-zinc-800/50 transition-colors">
                       <td className="py-3 px-4">
-                        <div className="font-semibold text-slate-900 dark:text-white">{emp.name}</div>
-                        <div className="text-[11px] font-mono text-slate-500 dark:text-zinc-400">{emp.employeeId}</div>
-                        <div className="text-[11px] text-slate-400 dark:text-zinc-500">{emp.designation}</div>
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-bold text-xs text-rose-600 dark:text-rose-400 shrink-0">
+                            {emp.avatar ? (
+                              <img src={emp.avatar} alt={emp.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <span>{(emp.name || 'U').charAt(0).toUpperCase()}</span>
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-semibold text-slate-900 dark:text-white truncate">{emp.name}</div>
+                            <div className="text-[11px] font-mono text-slate-500 dark:text-zinc-400">{emp.employeeId}</div>
+                            <div className="text-[11px] text-slate-400 dark:text-zinc-500 truncate">{emp.designation}</div>
+                          </div>
+                        </div>
                       </td>
                       <td className="py-3 px-4 font-medium text-slate-600 dark:text-slate-300">
                         {emp.department || 'Unassigned'}

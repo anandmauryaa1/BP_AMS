@@ -83,6 +83,7 @@ router.get('/employee', async (req, res) => {
         const employeeSettings = {
             name: user.name,
             email: user.email,
+            avatar: user.avatar || null,
             phone: user.phone || '',
             department: user.department,
             designation: user.designation,
@@ -123,6 +124,10 @@ router.post('/employee', async (req, res) => {
             emergencyContactName: req.body.emergencyContactName,
             emergencyContactPhone: req.body.emergencyContactPhone,
         };
+
+        if (req.body.avatar !== undefined) {
+            updatePayload.avatar = req.body.avatar && typeof req.body.avatar === 'string' ? req.body.avatar.trim() : null;
+        }
 
         const updatedUser = await User.findByIdAndUpdate(userId, updatePayload, { new: true }).lean();
 

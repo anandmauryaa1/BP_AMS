@@ -141,6 +141,7 @@ router.post('/employees', async (req, res) => {
             name,
             email,
             phone: phone || undefined,
+            avatar: req.body.avatar || undefined,
             department,
             designation: designation || undefined,
             role,
@@ -202,6 +203,8 @@ const handleUpdateEmployee = async (req, res) => {
             employee.department = updates.department.trim();
         if (updates.designation !== undefined)
             employee.designation = updates.designation;
+        if (updates.avatar !== undefined)
+            employee.avatar = updates.avatar && typeof updates.avatar === 'string' ? updates.avatar.trim() : null;
         if (updates.role)
             employee.role = updates.role;
         if (updates.status) {

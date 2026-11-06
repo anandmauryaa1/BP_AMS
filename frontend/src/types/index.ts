@@ -116,6 +116,7 @@ export interface IUser {
   passwordHash?: string;
   name: string;
   email: string;
+  avatar?: string;
   phone?: string;
   department: string;
   designation?: string;
@@ -404,6 +405,7 @@ export interface SessionPayload {
   username: string;
   name: string;
   email?: string;
+  avatar?: string;
   role: UserRole;
   department?: string;
   designation?: string;

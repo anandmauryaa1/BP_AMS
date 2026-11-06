@@ -23,6 +23,7 @@ import {
   Clock,
 } from 'lucide-react';
 import { PushNotificationManager } from '@/components/PushNotificationManager';
+import { ProfilePhotoUploader } from '@/components/profile/ProfilePhotoUploader';
 
 interface Props {
   initialProfile?: any;
@@ -142,20 +143,19 @@ export default function AdminProfileClient({ initialProfile = null }: Props) {
           <div className="space-y-6">
             {/* Primary Admin Info Card */}
             <Card className="border-slate-200 dark:border-slate-800">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-purple-600 text-white flex items-center justify-center font-bold text-lg shadow-sm shadow-purple-600/20">
-                      <ShieldCheck className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-base font-bold text-slate-900 dark:text-white">{user?.name}</CardTitle>
-                      <CardDescription className="text-xs dark:text-slate-400">
-                        Primary System Administrator &bull; blindarea Production
-                      </CardDescription>
-                    </div>
+              <CardHeader className="pb-4 border-b border-slate-100 dark:border-slate-800/80">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <ProfilePhotoUploader
+                    currentAvatar={user?.avatar}
+                    userName={user?.name}
+                    size="md"
+                    onPhotoUpdated={(newPhoto) => {
+                      setUser((prev: any) => ({ ...prev, avatar: newPhoto }));
+                    }}
+                  />
+                  <div className="self-end sm:self-center">
+                    <Badge status="ADMIN" />
                   </div>
-                  <Badge status="ADMIN" />
                 </div>
               </CardHeader>
 

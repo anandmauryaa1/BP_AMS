@@ -35,6 +35,10 @@ const UserSchema = new Schema({
         type: String,
         trim: true,
     },
+    avatar: {
+        type: String,
+        default: null,
+    },
     department: {
         type: String,
         required: [true, 'Department is required'],

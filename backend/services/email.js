@@ -25,7 +25,7 @@ function getTransporter() {
     return transporter;
 }
 
-export function getEmailSignature(companyName = 'blindarea Production') {
+export function getEmailSignature(companyName = 'Blindera Productions') {
     const html = `
     <div style="margin-top: 28px; padding-top: 20px; border-top: 1px solid #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #475569; font-size: 14px; line-height: 1.5;">
       <p style="margin: 0 0 4px 0; color: #64748b; font-size: 14px;">Thanks &amp; Regards,</p>
@@ -45,7 +45,7 @@ export async function sendEmail(options) {
         return { success: false, error: 'SMTP credentials not configured in environment variables' };
     }
     try {
-        const from = process.env.EMAIL_FROM || `blindarea production <${process.env.SMTP_USER || 'blinderaproductions.office@gmail.com'}>`;
+        const from = process.env.EMAIL_FROM || `Blindera Productions <${process.env.SMTP_USER || 'blinderaproductions.office@gmail.com'}>`;
         console.log(`[EMAIL_SENDING] Initiating delivery to ${options.to} via ${process.env.SMTP_HOST || 'smtp.gmail.com'}...`);
         const info = await trans.sendMail({
             from,
@@ -71,7 +71,7 @@ export async function sendEmail(options) {
 
 export async function sendWelcomeEmail(options) {
     const clientUrl = process.env.CLIENT_URL || '';
-    const company = options.companyName || 'blindarea Production';
+    const company = options.companyName || 'Blindera Productions';
     const signature = getEmailSignature(company);
 
     const html = `
@@ -113,7 +113,7 @@ export async function sendWelcomeEmail(options) {
 
 export async function sendPasswordResetEmail(options) {
     const clientUrl = process.env.CLIENT_URL || '';
-    const company = options.companyName || 'blindarea Production';
+    const company = options.companyName || 'Blindera Productions';
     const resetUrl = `${clientUrl}/reset-password?token=${options.token}`;
     const signature = getEmailSignature(company);
 
@@ -149,7 +149,7 @@ export async function sendPasswordResetEmail(options) {
 
 export async function sendAdminPasswordResetEmail(options) {
     const clientUrl = process.env.CLIENT_URL || '';
-    const company = options.companyName || 'blindarea Production';
+    const company = options.companyName || 'Blindera Productions';
     const signature = getEmailSignature(company);
 
     const html = `
@@ -188,7 +188,7 @@ export async function sendAdminPasswordResetEmail(options) {
 
 export async function sendLeaveApplicationEmails({ leave, employeeEmail, employeeName, adminEmails = [] }) {
     const clientUrl = process.env.CLIENT_URL || '';
-    const company = 'blindarea Production';
+    const company = 'Blindera Productions';
     const signature = getEmailSignature(company);
 
     const startDateStr = leave.startDate ? new Date(leave.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A';
@@ -277,7 +277,7 @@ export async function sendLeaveApplicationEmails({ leave, employeeEmail, employe
 export async function sendLeaveDecisionEmail({ leave, employeeEmail, employeeName, reviewerName }) {
     if (!employeeEmail) return;
     const clientUrl = process.env.CLIENT_URL || '';
-    const company = 'blindarea Production';
+    const company = 'Blindera Productions';
     const signature = getEmailSignature(company);
 
     const isApproved = leave.status === 'APPROVED';
