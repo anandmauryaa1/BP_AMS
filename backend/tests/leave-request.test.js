@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { LeaveRequest } from '../models/LeaveRequest.js';
-import { sendLeaveApplicationEmails, sendLeaveDecisionEmail } from '../services/email.js';
+import {
+  sendLeaveApplicationEmails,
+  sendLeaveDecisionEmail,
+  sendAdminRecordedLeaveEmail,
+  sendLeaveUpdatedEmail,
+  sendLeaveDeletedEmail,
+} from '../services/email.js';
 
 describe('LeaveRequest Model & Email Notifications', () => {
   it('should normalize leaveType when only type is provided', async () => {
@@ -58,8 +64,29 @@ describe('LeaveRequest Model & Email Notifications', () => {
     expect(leave.type).toBe('CASUAL');
   });
 
-  it('should export sendLeaveApplicationEmails & sendLeaveDecisionEmail functions', () => {
+  it('should support soft-delete & admin edit metadata fields on LeaveRequest', async () => {
+    const leave = new LeaveRequest({
+      employeeId: 'EMP-005',
+      startDate: '2026-11-12',
+      endDate: '2026-11-13',
+      reason: 'Created in error',
+      editNotes: 'Adjusted date',
+      isDeleted: true,
+      deletedBy: 'Admin User',
+      deletionReason: 'Created by mistake for wrong employee',
+    });
+
+    await leave.validate();
+    expect(leave.isDeleted).toBe(true);
+    expect(leave.deletionReason).toBe('Created by mistake for wrong employee');
+    expect(leave.editNotes).toBe('Adjusted date');
+  });
+
+  it('should export leave lifecycle email functions (create, update, decision, delete)', () => {
     expect(typeof sendLeaveApplicationEmails).toBe('function');
     expect(typeof sendLeaveDecisionEmail).toBe('function');
+    expect(typeof sendAdminRecordedLeaveEmail).toBe('function');
+    expect(typeof sendLeaveUpdatedEmail).toBe('function');
+    expect(typeof sendLeaveDeletedEmail).toBe('function');
   });
 });

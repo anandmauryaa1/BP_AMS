@@ -6,6 +6,7 @@ import { Task } from '../models/Task.js';
 import { Deliverable } from '../models/Deliverable.js';
 import { ReviewEvent } from '../models/ReviewEvent.js';
 import { LeaveRequest } from '../models/LeaveRequest.js';
+import { summarizeLeavesInRange } from './leave-utils.js';
 export async function computeDeepAnalytics(filters) {
     await connectToDatabase();
     const user = await User.findOne({
@@ -78,10 +79,11 @@ export async function computeDeepAnalytics(filters) {
     const leaveRequests = await LeaveRequest.find({
         $or: [{ employeeId: empCode }, { employeeId: empMongoId }],
         status: 'APPROVED',
+        isDeleted: { $ne: true },
         startDate: { $lte: endStr },
         endDate: { $gte: startStr },
     }).lean();
-    const leaveDays = leaveRequests.length;
+    const { totalLeaveDays: leaveDays } = summarizeLeavesInRange(leaveRequests, startStr, endStr);
     const attendanceConsistency = Math.round((presentDays / Math.max(1, totalDaysInRange - leaveDays)) * 100);
     const avgWorkingMinutes = presentDays > 0 ? Math.round(totalWorkingMins / presentDays) : 0;
     const avgBreakMinutes = presentDays > 0 ? Math.round(totalBreakMins / presentDays) : 0;

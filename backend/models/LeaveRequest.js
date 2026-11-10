@@ -23,11 +23,18 @@ const LeaveRequestSchema = new Schema({
     status: { type: String, enum: ['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'], default: 'PENDING' },
     reviewedBy: { type: String },
     reviewedAt: { type: Date },
-    reviewNotes: { type: String },
+    reviewNotes: { type: String, trim: true },
+    updatedBy: { type: String },
+    editNotes: { type: String, trim: true },
+    isDeleted: { type: Boolean, default: false },
+    deletedBy: { type: String },
+    deletedAt: { type: Date },
+    deletionReason: { type: String, trim: true },
 }, { timestamps: true });
 
 // ESR Compound Index Rule: Equality (employeeId, status), Sort/Range (startDate DESC)
 LeaveRequestSchema.index({ employeeId: 1, status: 1, startDate: -1 });
+LeaveRequestSchema.index({ isDeleted: 1, createdAt: -1 });
 
 LeaveRequestSchema.pre('validate', function (next) {
     if (!this.leaveType && this.type) {

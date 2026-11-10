@@ -9,26 +9,36 @@ import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { getTodayDateString, formatDate } from '@/lib/utils';
-import { Palmtree, Plus, CheckCircle2, AlertCircle, Calendar, Clock } from 'lucide-react';
+import { Palmtree, Plus, CheckCircle2, AlertCircle, Calendar, Clock, XCircle } from 'lucide-react';
 
 import { ILeaveRequest, LeaveType, SessionPayload } from '@/types';
 
+interface LeaveBalanceItem {
+  leaveType: string;
+  title: string;
+  annualQuota: number;
+  accruedToDate: number;
+  takenThisYear: number;
+  remainingBalance: number;
+}
+
 export default function EmployeeLeavesClient({ initialLeaves = [] }: { initialLeaves?: any[] }) {
   const [user, setUser] = useState<SessionPayload | null>(null);
-  const [leaves, setLeaves] = useState<ILeaveRequest[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [leaves, setLeaves] = useState<ILeaveRequest[]>(initialLeaves);
+  const [balances, setBalances] = useState<LeaveBalanceItem[]>([]);
+  const [isLoading, setIsLoading] = useState(initialLeaves.length === 0);
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
   const [selectedLeave, setSelectedLeave] = useState<ILeaveRequest | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   const getLeaveDays = (startDate: string, endDate: string) => {
-    if (!startDate || !endDate) return 1;
+    if (!startDate || !endDate) return 0;
     const start = new Date(startDate).getTime();
     const end = new Date(endDate).getTime();
-    if (isNaN(start) || isNaN(end)) return 1;
-    const diffTime = Math.abs(end - start);
-    return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    if (isNaN(start) || isNaN(end) || end < start) return 0;
+    return Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1;
   };
 
 
@@ -45,20 +55,25 @@ export default function EmployeeLeavesClient({ initialLeaves = [] }: { initialLe
   };
 
   const fetchLeaves = useCallback(async () => {
-    setIsLoading(true);
+    if (leaves.length === 0) setIsLoading(true);
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
       const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
-      const meRes = await fetch('/api/auth/me', { headers: authHeaders, credentials: 'include' });
-      const meData = await meRes.json();
+      const [meRes, res, balRes] = await Promise.all([
+        fetch('/api/auth/me', { headers: authHeaders, credentials: 'include' }),
+        fetch('/api/leaves', { headers: authHeaders, credentials: 'include' }),
+        fetch('/api/leaves/balances', { headers: authHeaders, credentials: 'include' }),
+      ]);
+      const [meData, data, balData] = await Promise.all([meRes.json(), res.json(), balRes.json()]);
       if (meData.success) setUser(meData.data);
 
-      const res = await fetch('/api/leaves', { headers: authHeaders, credentials: 'include' });
-      const data = await res.json();
       if (data.success) {
         const found = Array.isArray(data.data) ? data.data : (data.data?.leaves || data.leaves || []);
         setLeaves(found);
+      }
+      if (balData.success && Array.isArray(balData.data)) {
+        setBalances(balData.data);
       }
     } catch (err) {
       console.error('Error fetching leaves:', err);
@@ -73,6 +88,10 @@ export default function EmployeeLeavesClient({ initialLeaves = [] }: { initialLe
 
   const handleApplyLeave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!form.startDate || !form.endDate || form.endDate < form.startDate) {
+      showToast('End date cannot be earlier than start date', 'error');
+      return;
+    }
     setIsSubmitting(true);
 
     try {
@@ -92,7 +111,7 @@ export default function EmployeeLeavesClient({ initialLeaves = [] }: { initialLe
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        showToast(data.message || data.error || 'Failed to submit leave request', 'error');
+        showToast(data.error || data.message || 'Failed to submit leave request', 'error');
       } else {
         showToast('Leave request submitted for review', 'success');
         setIsApplyModalOpen(false);
@@ -108,6 +127,33 @@ export default function EmployeeLeavesClient({ initialLeaves = [] }: { initialLe
       showToast('Network error submitting leave request', 'error');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleCancelPendingLeave = async (leaveId: string) => {
+    setCancellingId(leaveId);
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+      const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
+      const res = await fetch(`/api/leaves/${leaveId}/cancel`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        credentials: 'include',
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        showToast(data.error || 'Failed to cancel leave request', 'error');
+        return;
+      }
+
+      showToast('Pending leave request cancelled', 'success');
+      setSelectedLeave(null);
+      fetchLeaves();
+    } catch {
+      showToast('Network error cancelling leave request', 'error');
+    } finally {
+      setCancellingId(null);
     }
   };
 
@@ -151,6 +197,30 @@ export default function EmployeeLeavesClient({ initialLeaves = [] }: { initialLe
             Apply for Leave
           </Button>
         </div>
+
+        {/* Annual Leave Balances Strip (if LeavePolicy configured) */}
+        {balances.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+            {balances.map((bal) => (
+              <div
+                key={bal.leaveType}
+                className="p-3.5 rounded-xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 shadow-sm"
+              >
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  {bal.title || bal.leaveType}
+                </div>
+                <div className="flex items-baseline justify-between mt-1">
+                  <span className="text-lg font-extrabold text-slate-900 dark:text-white">
+                    {bal.remainingBalance} <span className="text-[11px] font-medium text-slate-400">left</span>
+                  </span>
+                  <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                    {bal.takenThisYear}/{bal.accruedToDate} used
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Mobile View: Clean Leave Request Cards (sm:hidden) */}
         <div className="sm:hidden space-y-3">
@@ -258,7 +328,7 @@ export default function EmployeeLeavesClient({ initialLeaves = [] }: { initialLe
                         <Badge status={leave.status as any} />
                       </td>
                       <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400 italic text-[11px]">
-                        {leave.reviewNotes ? `"${leave.reviewNotes}" by ${leave.reviewedBy}` : '-'}
+                        {leave.reviewNotes ? `"${leave.reviewNotes}"${leave.reviewedBy ? ` by ${leave.reviewedBy}` : ''}` : '-'}
                       </td>
                       <td className="py-3.5 px-4 text-slate-500 dark:text-slate-400">{formatDate(leave.createdAt)}</td>
                     </tr>
@@ -362,19 +432,48 @@ export default function EmployeeLeavesClient({ initialLeaves = [] }: { initialLe
                           <span>{formatDate(selectedLeave.reviewedAt)}</span>
                         </div>
                       )}
+                      {selectedLeave.updatedBy && (
+                        <div className="flex items-center justify-between text-slate-700 dark:text-slate-300">
+                          <span className="font-medium text-slate-500 dark:text-slate-400">Last Updated By:</span>
+                          <span className="font-semibold text-blue-600 dark:text-blue-400">{selectedLeave.updatedBy}</span>
+                        </div>
+                      )}
                       <div className="pt-2 border-t border-slate-200/80 dark:border-slate-800">
                         <span className="font-medium text-slate-500 dark:text-slate-400 block mb-1">Review Notes:</span>
                         <div className="p-3 rounded-lg bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 italic">
                           {selectedLeave.reviewNotes ? `"${selectedLeave.reviewNotes}"` : 'No reviewer notes added.'}
                         </div>
                       </div>
+                      {selectedLeave.editNotes && (
+                        <div className="pt-2 border-t border-slate-200/80 dark:border-slate-800">
+                          <span className="font-medium text-slate-500 dark:text-slate-400 block mb-1">Admin Update Note:</span>
+                          <div className="p-3 rounded-lg bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/60 dark:border-blue-900/40 text-blue-800 dark:text-blue-300 italic">
+                            &ldquo;{selectedLeave.editNotes}&rdquo;
+                          </div>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
               </div>
 
               {/* Action Footer */}
-              <div className="flex justify-end pt-3 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex items-center justify-between gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                {selectedLeave.status === 'PENDING' ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    isLoading={cancellingId === selectedLeave._id}
+                    onClick={() => handleCancelPendingLeave(selectedLeave._id)}
+                    className="text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800 hover:bg-rose-50 dark:hover:bg-rose-950/40 gap-1.5"
+                  >
+                    <XCircle className="w-3.5 h-3.5" />
+                    Cancel Request
+                  </Button>
+                ) : (
+                  <span />
+                )}
                 <Button variant="outline" size="sm" onClick={() => setSelectedLeave(null)}>
                   Close
                 </Button>
@@ -401,7 +500,14 @@ export default function EmployeeLeavesClient({ initialLeaves = [] }: { initialLe
                   type="date"
                   required
                   value={form.startDate}
-                  onChange={(e) => setForm({ ...form, startDate: e.target.value })}
+                  onChange={(e) => {
+                    const nextStart = e.target.value;
+                    setForm({
+                      ...form,
+                      startDate: nextStart,
+                      endDate: form.endDate < nextStart ? nextStart : form.endDate,
+                    });
+                  }}
                   className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-rose-500"
                 />
               </div>
@@ -413,12 +519,19 @@ export default function EmployeeLeavesClient({ initialLeaves = [] }: { initialLe
                 <input
                   type="date"
                   required
+                  min={form.startDate}
                   value={form.endDate}
                   onChange={(e) => setForm({ ...form, endDate: e.target.value })}
                   className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-rose-500"
                 />
               </div>
             </div>
+
+            {getLeaveDays(form.startDate, form.endDate) > 0 && (
+              <div className="text-[11px] font-mono text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/70 px-3 py-1.5 rounded-lg inline-block">
+                Duration: <strong>{getLeaveDays(form.startDate, form.endDate)} Day(s)</strong>
+              </div>
+            )}
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1">
@@ -433,6 +546,7 @@ export default function EmployeeLeavesClient({ initialLeaves = [] }: { initialLe
                 <option value="SICK">Sick Leave</option>
                 <option value="EMERGENCY">Emergency Leave</option>
                 <option value="UNPAID">Unpaid Leave</option>
+                <option value="OTHER">Other</option>
               </select>
             </div>
 

@@ -13,6 +13,7 @@ import { PayrollRun } from '../models/PayrollRun.js';
 import { SalaryLoan } from '../models/SalaryLoan.js';
 import { TaxDeclaration } from '../models/TaxDeclaration.js';
 import { calculateMonthlyTds } from '../services/tds-tax-engine.js';
+import { getMonthDateBounds, summarizeLeavesInRange } from '../services/leave-utils.js';
 
 const router = Router();
 router.use(authenticateToken);
@@ -147,7 +148,7 @@ const handleEmployeePerformanceSalary = async (req, res) => {
 
         const monthStr = String(targetMonth).padStart(2, '0');
         const monthPrefix = `${targetYear}-${monthStr}`;
-        const totalDaysInMonth = new Date(targetYear, targetMonth, 0).getDate();
+        const { monthStartStr, monthEndStr, totalDaysInMonth } = getMonthDateBounds(targetYear, targetMonth);
 
         const empCodeUpper = empCode ? empCode.toUpperCase() : '';
         const empQueryOr = [
@@ -179,6 +180,9 @@ const handleEmployeePerformanceSalary = async (req, res) => {
             LeaveRequest.find({
                 $or: [{ employeeId: empCode }, { userId: empMongoId }, { user: empMongoId }],
                 status: 'APPROVED',
+                isDeleted: { $ne: true },
+                startDate: { $lte: monthEndStr },
+                endDate: { $gte: monthStartStr },
             }).lean(),
             PayrollStructure.findOne({ $or: empQueryOr }).lean(),
             TaxDeclaration.findOne({
@@ -227,25 +231,16 @@ const handleEmployeePerformanceSalary = async (req, res) => {
         }
         const actualPresentDays = attendanceRecords.length > 0 ? loggedPresentDays : totalDaysInMonth;
 
-        let approvedPaidLeaves = 0;
-        let lwpDays = 0;
-
-        leaveRequests.forEach(lvl => {
-            const lvlStart = new Date(lvl.startDate);
-            const lvlEnd = new Date(lvl.endDate);
-            if (lvlStart.getFullYear() === targetYear && (lvlStart.getMonth() + 1) === targetMonth) {
-                const days = lvl.totalDays || Math.max(1, Math.ceil((lvlEnd.getTime() - lvlStart.getTime()) / (1000 * 3600 * 24)) + 1);
-                if (['UNPAID', 'LWP', 'LEAVE_WITHOUT_PAY'].includes(lvl.leaveType?.toUpperCase())) {
-                    lwpDays += days;
-                } else {
-                    approvedPaidLeaves += days;
-                }
-            }
-        });
+        const { approvedPaidLeaveDays: approvedPaidLeaves, unpaidLeaveDays } = summarizeLeavesInRange(
+            leaveRequests,
+            monthStartStr,
+            monthEndStr
+        );
+        let lwpDays = unpaidLeaveDays;
 
         if (attendanceRecords.length > 0) {
             const unlogged = Math.max(0, totalDaysInMonth - actualPresentDays - approvedPaidLeaves);
-            lwpDays = Math.max(lwpDays, unlogged);
+            lwpDays = Math.min(totalDaysInMonth, Math.max(lwpDays, unlogged));
         }
 
         const effectivePaidDays = Math.max(0, totalDaysInMonth - lwpDays);

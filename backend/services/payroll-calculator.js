@@ -3,9 +3,11 @@ import { PayrollStructure } from '../models/PayrollStructure.js';
 import { PayrollRun } from '../models/PayrollRun.js';
 import { SalaryLoan } from '../models/SalaryLoan.js';
 import { Attendance } from '../models/Attendance.js';
+import { LeaveRequest } from '../models/LeaveRequest.js';
 import { User } from '../models/User.js';
 import { TaxDeclaration } from '../models/TaxDeclaration.js';
 import { calculateMonthlyTds } from './tds-tax-engine.js';
+import { getMonthDateBounds, summarizeLeavesInRange } from './leave-utils.js';
 
 /**
  * Generates or updates monthly payroll for a specific employee or all active employees.
@@ -15,9 +17,7 @@ export async function generateMonthlyPayroll(month, year, employeeId = null) {
 
     const monthStr = String(month).padStart(2, '0');
     const monthPrefix = `${year}-${monthStr}`;
-
-    // Get total days in target month
-    const totalDaysInMonth = new Date(year, month, 0).getDate();
+    const { monthStartStr, monthEndStr, totalDaysInMonth } = getMonthDateBounds(year, month);
 
     // Query active employees
     const userQuery = { status: 'ACTIVE' };
@@ -42,11 +42,27 @@ export async function generateMonthlyPayroll(month, year, employeeId = null) {
             continue;
         }
 
-        // Fetch attendance records for the month
-        const attendanceRecords = await Attendance.find({
-            employeeId: empId,
-            date: { $regex: `^${monthPrefix}` },
-        }).lean();
+        // Fetch attendance records and approved leaves for the month
+        const empMongoId = emp._id ? emp._id.toString() : null;
+        const [attendanceRecords, approvedLeaves] = await Promise.all([
+            Attendance.find({
+                $or: [
+                    { employeeId: empId },
+                    ...(empMongoId ? [{ employeeId: empMongoId }] : []),
+                ],
+                date: { $regex: `^${monthPrefix}` },
+            }).lean(),
+            LeaveRequest.find({
+                $or: [
+                    { employeeId: empId },
+                    ...(empMongoId ? [{ employeeId: empMongoId }, { userId: empMongoId }] : []),
+                ],
+                status: 'APPROVED',
+                isDeleted: { $ne: true },
+                startDate: { $lte: monthEndStr },
+                endDate: { $gte: monthStartStr },
+            }).lean(),
+        ]);
 
         let presentDays = 0;
         let absentDays = 0;
@@ -61,10 +77,22 @@ export async function generateMonthlyPayroll(month, year, employeeId = null) {
             }
         }
 
+        const { approvedPaidLeaveDays, unpaidLeaveDays } = summarizeLeavesInRange(
+            approvedLeaves,
+            monthStartStr,
+            monthEndStr
+        );
+
         const totalWorkingHours = Math.round((totalWorkingMinutes / 60) * 100) / 100;
         const actualPresentDays = attendanceRecords.length > 0 ? presentDays : totalDaysInMonth;
-        const lopDays = Math.max(0, totalDaysInMonth - actualPresentDays);
-        const paidDaysRatio = actualPresentDays / totalDaysInMonth;
+        let lopDays = 0;
+        if (attendanceRecords.length > 0) {
+            const unloggedDays = Math.max(0, totalDaysInMonth - actualPresentDays - approvedPaidLeaveDays);
+            lopDays = Math.min(totalDaysInMonth, Math.max(unpaidLeaveDays, unloggedDays));
+        } else {
+            lopDays = Math.min(totalDaysInMonth, unpaidLeaveDays);
+        }
+        const paidDaysRatio = Math.max(0, totalDaysInMonth - lopDays) / totalDaysInMonth;
 
         const calculationType = structure.calculationType || 'HOURLY';
         const standardHours = structure.standardHoursPerMonth || 160;

@@ -2,6 +2,7 @@ import { connectToDatabase } from '../db.js';
 import { LeavePolicy } from '../models/LeavePolicy.js';
 import { LeaveRequest } from '../models/LeaveRequest.js';
 import { User } from '../models/User.js';
+import { countLeaveDaysInRange } from './leave-utils.js';
 
 /**
  * Calculates current leave balances & accruals for an employee across active leave types.
@@ -11,23 +12,25 @@ export async function calculateEmployeeLeaveBalances(employeeId, year = new Date
 
     const policies = await LeavePolicy.find({ isActive: true }).lean();
 
-    // Fetch approved leaves taken by employee in current year
+    // Fetch approved leaves taken by employee overlapping current year
     const startDateYear = `${year}-01-01`;
     const endDateYear = `${year}-12-31`;
 
     const approvedLeaves = await LeaveRequest.find({
         $or: [{ employeeId }, { employeeId: employeeId.toUpperCase() }],
         status: 'APPROVED',
-        startDate: { $gte: startDateYear, $lte: endDateYear },
+        isDeleted: { $ne: true },
+        startDate: { $lte: endDateYear },
+        endDate: { $gte: startDateYear },
     }).lean();
 
     const leaveTakenMap = {};
     for (const l of approvedLeaves) {
-        const type = l.leaveType || l.type || 'CASUAL';
-        const start = new Date(l.startDate);
-        const end = new Date(l.endDate);
-        const diffDays = Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1);
-        leaveTakenMap[type] = (leaveTakenMap[type] || 0) + diffDays;
+        const type = (l.leaveType || l.type || 'CASUAL').toUpperCase();
+        const diffDays = countLeaveDaysInRange(l.startDate, l.endDate, startDateYear, endDateYear);
+        if (diffDays > 0) {
+            leaveTakenMap[type] = (leaveTakenMap[type] || 0) + diffDays;
+        }
     }
 
     const currentMonth = new Date().getMonth() + 1; // 1 to 12

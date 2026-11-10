@@ -85,7 +85,7 @@ export type TaskStatus =
   | 'COMPLETED'
   | 'CANCELLED';
 
-export type LeaveType = 'CASUAL' | 'SICK' | 'EMERGENCY' | 'UNPAID';
+export type LeaveType = 'CASUAL' | 'SICK' | 'EMERGENCY' | 'UNPAID' | 'OTHER';
 export type LeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
 
 export interface ILocation {
@@ -371,6 +371,12 @@ export interface ILeaveRequest {
   reviewedBy?: string;
   reviewedAt?: Date;
   reviewNotes?: string;
+  updatedBy?: string;
+  editNotes?: string;
+  isDeleted?: boolean;
+  deletedBy?: string;
+  deletedAt?: Date;
+  deletionReason?: string;
   createdAt: Date;
   updatedAt: Date;
 }

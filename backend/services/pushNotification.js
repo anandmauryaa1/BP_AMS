@@ -338,7 +338,32 @@ export async function notifyLeaveDecision(params) {
         title: isApproved ? `✅ Leave Approved` : `❌ Leave Application Update`,
         message: isApproved
             ? `Your leave request for ${leave.startDate} to ${leave.endDate} has been approved by ${reviewerName || 'Management'}.`
-            : `Your leave request for ${leave.startDate} to ${leave.endDate} was not approved.${leave.rejectionsReason ? ` Reason: "${leave.rejectionsReason}"` : ''}`,
+            : `Your leave request for ${leave.startDate} to ${leave.endDate} was not approved.${(leave.reviewNotes || leave.rejectionsReason) ? ` Reason: "${leave.reviewNotes || leave.rejectionsReason}"` : ''}`,
+        type: 'LEAVE_STATUS',
+        link: '/leaves',
+    });
+}
+/**
+ * Trigger: When an admin creates, edits, or deletes an employee leave
+ */
+export async function notifyLeaveModified(params) {
+    const { employeeId, action, leave, actorName, reason } = params;
+    if (!employeeId) return;
+
+    let title = '📅 Leave Record Updated';
+    let message = `Your ${leave.leaveType || 'leave'} (${leave.startDate} to ${leave.endDate}) was updated by ${actorName || 'Admin'}.`;
+
+    if (action === 'CREATED') {
+        title = `📅 Leave Recorded (${leave.status})`;
+        message = `A ${leave.leaveType || 'leave'} (${leave.startDate} to ${leave.endDate}) was recorded for you by ${actorName || 'Admin'}.`;
+    } else if (action === 'DELETED') {
+        title = '🗑️ Leave Entry Removed';
+        message = `Your ${leave.leaveType || 'leave'} (${leave.startDate} to ${leave.endDate}) was removed by ${actorName || 'Admin'}. Reason: "${reason}"`;
+    }
+
+    await notifyUser(employeeId, {
+        title,
+        message,
         type: 'LEAVE_STATUS',
         link: '/leaves',
     });

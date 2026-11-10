@@ -351,7 +351,7 @@ export const getMyTasks = cache(async () => {
 /** Fetch employee leaves — revalidates every 30s */
 export const getMyLeaves = cache(async () => {
   const res = await serverFetch('/api/leaves/my', { next: { revalidate: 30, tags: ['my-leaves'] } });
-  return Array.isArray(res.data) ? res.data : (res.data?.leaves || []);
+  return Array.isArray(res.data) ? res.data : (res.data?.leaves || res.leaves || []);
 });
 
 /** Fetch employee profile — revalidates every 60s */

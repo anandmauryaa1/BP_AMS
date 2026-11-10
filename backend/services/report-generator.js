@@ -11,6 +11,7 @@ import { EmployeeWeeklyReport } from '../models/EmployeeWeeklyReport.js';
 import { EmployeeMonthlyReport } from '../models/EmployeeMonthlyReport.js';
 import { logAuditEvent } from './audit.js';
 import { formatDateString, parseDateString } from '../utils/index.js';
+import { summarizeLeavesInRange } from './leave-utils.js';
 export async function generateDailyReport(employeeId, dateStr, options) {
     await connectToDatabase();
     const user = await User.findOne({
@@ -264,10 +265,11 @@ export async function generateWeeklyReport(employeeId, weekStartStr, options) {
     const leaveDocs = await LeaveRequest.find({
         $or: [{ employeeId: empCode }, { employeeId: empMongoId }],
         status: 'APPROVED',
+        isDeleted: { $ne: true },
         startDate: { $lte: weekEndStr },
         endDate: { $gte: weekStartStr },
     }).lean();
-    const leaveDays = leaveDocs.length;
+    const { totalLeaveDays: leaveDays } = summarizeLeavesInRange(leaveDocs, weekStartStr, weekEndStr);
     const workingDays = 5;
     let presentDays = 0;
     let absentDays = 0;
@@ -442,13 +444,18 @@ export async function generateMonthlyReport(employeeId, year, month, options) {
     const leaveDocs = await LeaveRequest.find({
         $or: [{ employeeId: empCode }, { employeeId: empMongoId }],
         status: 'APPROVED',
+        isDeleted: { $ne: true },
         startDate: { $lte: formatDateString(endDate) },
         endDate: { $gte: formatDateString(startDate) },
     }).lean();
     const workingDays = 22;
     let presentDays = 0;
     let absentDays = 0;
-    const leaveDays = leaveDocs.length;
+    const { totalLeaveDays: leaveDays } = summarizeLeavesInRange(
+        leaveDocs,
+        formatDateString(startDate),
+        formatDateString(endDate)
+    );
     let totalPresenceMinutes = 0;
     let totalWorkingMinutes = 0;
     let totalBreakMinutes = 0;

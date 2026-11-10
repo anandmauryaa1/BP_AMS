@@ -186,14 +186,29 @@ export async function sendAdminPasswordResetEmail(options) {
     });
 }
 
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function formatLeaveDateRange(startDate, endDate) {
+    const startDateStr = startDate ? new Date(startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A';
+    const endDateStr = endDate ? new Date(endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : startDateStr;
+    return startDateStr === endDateStr ? startDateStr : `${startDateStr} - ${endDateStr}`;
+}
+
 export async function sendLeaveApplicationEmails({ leave, employeeEmail, employeeName, adminEmails = [] }) {
     const clientUrl = process.env.CLIENT_URL || '';
     const company = 'Blindera Productions';
     const signature = getEmailSignature(company);
-
-    const startDateStr = leave.startDate ? new Date(leave.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A';
-    const endDateStr = leave.endDate ? new Date(leave.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : startDateStr;
-    const dateRange = startDateStr === endDateStr ? startDateStr : `${startDateStr} - ${endDateStr}`;
+    const dateRange = formatLeaveDateRange(leave.startDate, leave.endDate);
+    const safeName = escapeHtml(employeeName || 'Team Member');
+    const safeType = escapeHtml(leave.leaveType || leave.type || 'Casual Leave');
+    const safeReason = leave.reason ? escapeHtml(leave.reason) : '';
 
     // 1. Email to Employee
     if (employeeEmail) {
@@ -203,15 +218,15 @@ export async function sendLeaveApplicationEmails({ leave, employeeEmail, employe
             <span style="display: inline-block; padding: 4px 12px; font-size: 12px; font-weight: 600; background: #f1f5f9; color: #475569; border-radius: 6px;">Leave Application</span>
           </div>
           <h2 style="color: #0f172a; font-size: 22px; font-weight: 700; margin: 0 0 16px 0; letter-spacing: -0.02em;">Leave Application Received</h2>
-          <p style="color: #475569; font-size: 14px; line-height: 1.6; margin: 0 0 16px 0;">Hello ${employeeName},</p>
+          <p style="color: #475569; font-size: 14px; line-height: 1.6; margin: 0 0 16px 0;">Hello ${safeName},</p>
           <p style="color: #475569; font-size: 14px; line-height: 1.6; margin: 0 0 20px 0;">
             Your leave request has been submitted successfully and is currently under review by management:
           </p>
 
           <div style="background: #f8fafc; padding: 18px 24px; border-radius: 12px; border: 1px solid #e2e8f0; margin: 0 0 24px 0;">
-            <p style="margin: 0 0 8px 0; font-size: 14px; color: #334155;"><strong>Leave Type:</strong> &nbsp;<span style="color: #0f172a; font-weight: 600;">${leave.leaveType || leave.type || 'Casual Leave'}</span></p>
+            <p style="margin: 0 0 8px 0; font-size: 14px; color: #334155;"><strong>Leave Type:</strong> &nbsp;<span style="color: #0f172a; font-weight: 600;">${safeType}</span></p>
             <p style="margin: 0 0 8px 0; font-size: 14px; color: #334155;"><strong>Dates:</strong> &nbsp;<span style="color: #0f172a; font-weight: 600;">${dateRange}</span></p>
-            ${leave.reason ? `<p style="margin: 0; font-size: 14px; color: #334155;"><strong>Reason:</strong> &nbsp;<span style="color: #475569;">${leave.reason}</span></p>` : ''}
+            ${safeReason ? `<p style="margin: 0; font-size: 14px; color: #334155;"><strong>Reason:</strong> &nbsp;<span style="color: #475569;">${safeReason}</span></p>` : ''}
           </div>
 
           <div style="margin: 0 0 24px 0;">
@@ -247,14 +262,14 @@ export async function sendLeaveApplicationEmails({ leave, employeeEmail, employe
           </div>
           <h2 style="color: #0f172a; font-size: 22px; font-weight: 700; margin: 0 0 16px 0; letter-spacing: -0.02em;">New Leave Application Submitted</h2>
           <p style="color: #475569; font-size: 14px; line-height: 1.6; margin: 0 0 20px 0;">
-            A new leave request has been submitted by <strong>${employeeName}</strong> and requires your review:
+            A new leave request has been submitted by <strong>${safeName}</strong> and requires your review:
           </p>
 
           <div style="background: #f8fafc; padding: 18px 24px; border-radius: 12px; border: 1px solid #e2e8f0; margin: 0 0 24px 0;">
-            <p style="margin: 0 0 8px 0; font-size: 14px; color: #334155;"><strong>Employee:</strong> &nbsp;<span style="color: #0f172a; font-weight: 600;">${employeeName}</span></p>
-            <p style="margin: 0 0 8px 0; font-size: 14px; color: #334155;"><strong>Leave Type:</strong> &nbsp;<span style="color: #0f172a; font-weight: 600;">${leave.leaveType || leave.type || 'Casual Leave'}</span></p>
+            <p style="margin: 0 0 8px 0; font-size: 14px; color: #334155;"><strong>Employee:</strong> &nbsp;<span style="color: #0f172a; font-weight: 600;">${safeName}</span></p>
+            <p style="margin: 0 0 8px 0; font-size: 14px; color: #334155;"><strong>Leave Type:</strong> &nbsp;<span style="color: #0f172a; font-weight: 600;">${safeType}</span></p>
             <p style="margin: 0 0 8px 0; font-size: 14px; color: #334155;"><strong>Dates:</strong> &nbsp;<span style="color: #0f172a; font-weight: 600;">${dateRange}</span></p>
-            ${leave.reason ? `<p style="margin: 0; font-size: 14px; color: #334155;"><strong>Reason:</strong> &nbsp;<span style="color: #475569;">${leave.reason}</span></p>` : ''}
+            ${safeReason ? `<p style="margin: 0; font-size: 14px; color: #334155;"><strong>Reason:</strong> &nbsp;<span style="color: #475569;">${safeReason}</span></p>` : ''}
           </div>
 
           <div style="margin: 0 0 24px 0;">
@@ -283,10 +298,11 @@ export async function sendLeaveDecisionEmail({ leave, employeeEmail, employeeNam
     const isApproved = leave.status === 'APPROVED';
     const statusBadgeColor = isApproved ? 'background: #dcfce7; color: #15803d;' : 'background: #ffe4e6; color: #be123c;';
     const statusText = isApproved ? 'Approved' : 'Rejected';
-
-    const startDateStr = leave.startDate ? new Date(leave.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A';
-    const endDateStr = leave.endDate ? new Date(leave.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : startDateStr;
-    const dateRange = startDateStr === endDateStr ? startDateStr : `${startDateStr} - ${endDateStr}`;
+    const dateRange = formatLeaveDateRange(leave.startDate, leave.endDate);
+    const safeName = escapeHtml(employeeName || 'Team Member');
+    const safeType = escapeHtml(leave.leaveType || leave.type || 'Casual Leave');
+    const safeReviewer = reviewerName ? escapeHtml(reviewerName) : '';
+    const safeNotes = escapeHtml(leave.reviewNotes || leave.rejectionsReason || '');
 
     const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 32px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);">
@@ -294,16 +310,16 @@ export async function sendLeaveDecisionEmail({ leave, employeeEmail, employeeNam
         <span style="display: inline-block; padding: 4px 12px; font-size: 12px; font-weight: 600; ${statusBadgeColor} border-radius: 6px;">Leave Request ${statusText}</span>
       </div>
       <h2 style="color: #0f172a; font-size: 22px; font-weight: 700; margin: 0 0 16px 0; letter-spacing: -0.02em;">Leave Application ${statusText}</h2>
-      <p style="color: #475569; font-size: 14px; line-height: 1.6; margin: 0 0 16px 0;">Hello ${employeeName},</p>
+      <p style="color: #475569; font-size: 14px; line-height: 1.6; margin: 0 0 16px 0;">Hello ${safeName},</p>
       <p style="color: #475569; font-size: 14px; line-height: 1.6; margin: 0 0 20px 0;">
-        Your leave application has been <strong>${statusText.toLowerCase()}</strong>${reviewerName ? ` by ${reviewerName}` : ''}:
+        Your leave application has been <strong>${statusText.toLowerCase()}</strong>${safeReviewer ? ` by ${safeReviewer}` : ''}:
       </p>
 
       <div style="background: #f8fafc; padding: 18px 24px; border-radius: 12px; border: 1px solid #e2e8f0; margin: 0 0 24px 0;">
-        <p style="margin: 0 0 8px 0; font-size: 14px; color: #334155;"><strong>Leave Type:</strong> &nbsp;<span style="color: #0f172a; font-weight: 600;">${leave.leaveType || leave.type || 'Casual Leave'}</span></p>
+        <p style="margin: 0 0 8px 0; font-size: 14px; color: #334155;"><strong>Leave Type:</strong> &nbsp;<span style="color: #0f172a; font-weight: 600;">${safeType}</span></p>
         <p style="margin: 0 0 8px 0; font-size: 14px; color: #334155;"><strong>Dates:</strong> &nbsp;<span style="color: #0f172a; font-weight: 600;">${dateRange}</span></p>
-        <p style="margin: 0 ${leave.reviewNotes || leave.rejectionsReason ? '0 8px 0' : ''}; font-size: 14px; color: #334155;"><strong>Status:</strong> &nbsp;<span style="font-weight: 700; color: ${isApproved ? '#16a34a' : '#dc2626'};">${statusText}</span></p>
-        ${leave.reviewNotes || leave.rejectionsReason ? `<p style="margin: 0; font-size: 14px; color: #334155;"><strong>Notes:</strong> &nbsp;<span style="color: #475569;">${leave.reviewNotes || leave.rejectionsReason}</span></p>` : ''}
+        <p style="margin: 0 ${safeNotes ? '0 8px 0' : ''}; font-size: 14px; color: #334155;"><strong>Status:</strong> &nbsp;<span style="font-weight: 700; color: ${isApproved ? '#16a34a' : '#dc2626'};">${statusText}</span></p>
+        ${safeNotes ? `<p style="margin: 0; font-size: 14px; color: #334155;"><strong>Notes:</strong> &nbsp;<span style="color: #475569;">${safeNotes}</span></p>` : ''}
       </div>
 
       <div style="margin: 0 0 24px 0;">
@@ -319,6 +335,150 @@ export async function sendLeaveDecisionEmail({ leave, employeeEmail, employeeNam
         subject: `Leave Application ${statusText} - ${company}`,
         html,
         text: `Hello ${employeeName},\n\nYour leave application (${leave.leaveType || 'Leave'}, ${dateRange}) has been ${statusText.toLowerCase()}.\n\nView portal: ${clientUrl}/leaves${signature.text}`,
+    });
+}
+
+function buildLeaveEmailCard({ badgeText, badgeStyle, title, greetingName, introHtml, detailsRowsHtml, ctaLabel, ctaHref, signatureHtml }) {
+    return `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 32px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);">
+      <div style="margin-bottom: 20px;">
+        <span style="display: inline-block; padding: 4px 12px; font-size: 12px; font-weight: 600; ${badgeStyle} border-radius: 6px;">${badgeText}</span>
+      </div>
+      <h2 style="color: #0f172a; font-size: 22px; font-weight: 700; margin: 0 0 16px 0; letter-spacing: -0.02em;">${title}</h2>
+      <p style="color: #475569; font-size: 14px; line-height: 1.6; margin: 0 0 16px 0;">Hello ${escapeHtml(greetingName)},</p>
+      <p style="color: #475569; font-size: 14px; line-height: 1.6; margin: 0 0 20px 0;">${introHtml}</p>
+      <div style="background: #f8fafc; padding: 18px 24px; border-radius: 12px; border: 1px solid #e2e8f0; margin: 0 0 24px 0;">
+        ${detailsRowsHtml}
+      </div>
+      <div style="margin: 0 0 24px 0;">
+        <a href="${ctaHref}" style="background: #e11d48; color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 10px; font-weight: 600; font-size: 14px; display: inline-block; box-shadow: 0 2px 4px rgba(225, 29, 72, 0.2);">${ctaLabel}</a>
+      </div>
+      ${signatureHtml}
+    </div>
+    `;
+}
+
+export async function sendAdminRecordedLeaveEmail({ leave, employeeEmail, employeeName, adminName }) {
+    if (!employeeEmail) return;
+    const clientUrl = process.env.CLIENT_URL || '';
+    const company = 'Blindera Productions';
+    const signature = getEmailSignature(company);
+    const dateRange = formatLeaveDateRange(leave.startDate, leave.endDate);
+    const leaveType = escapeHtml(leave.leaveType || leave.type || 'CASUAL');
+    const status = escapeHtml(leave.status || 'APPROVED');
+    const safeReason = leave.reason ? escapeHtml(leave.reason) : '';
+    const safeReviewNotes = leave.reviewNotes ? escapeHtml(leave.reviewNotes) : '';
+    const safeAdmin = escapeHtml(adminName || 'Admin');
+
+    const detailsRowsHtml = `
+      <p style="margin: 0 0 8px 0; font-size: 14px; color: #334155;"><strong>Leave Type:</strong> &nbsp;<span style="color: #0f172a; font-weight: 600;">${leaveType}</span></p>
+      <p style="margin: 0 0 8px 0; font-size: 14px; color: #334155;"><strong>Dates:</strong> &nbsp;<span style="color: #0f172a; font-weight: 600;">${dateRange}</span></p>
+      <p style="margin: 0 0 8px 0; font-size: 14px; color: #334155;"><strong>Status:</strong> &nbsp;<span style="color: #0f172a; font-weight: 700;">${status}</span></p>
+      ${safeReason ? `<p style="margin: 0 0 8px 0; font-size: 14px; color: #334155;"><strong>Reason:</strong> &nbsp;<span style="color: #475569;">${safeReason}</span></p>` : ''}
+      ${safeReviewNotes ? `<p style="margin: 0; font-size: 14px; color: #334155;"><strong>Admin Notes:</strong> &nbsp;<span style="color: #475569;">${safeReviewNotes}</span></p>` : ''}
+    `;
+
+    const html = buildLeaveEmailCard({
+        badgeText: `Leave Recorded (${status})`,
+        badgeStyle: status === 'APPROVED' ? 'background: #dcfce7; color: #15803d;' : 'background: #fef3c7; color: #b45309;',
+        title: 'Leave Record Created by Management',
+        greetingName: employeeName || 'Team Member',
+        introHtml: `This is a reminder &amp; confirmation that a leave record has been added for you by <strong>${safeAdmin}</strong>:`,
+        detailsRowsHtml,
+        ctaLabel: 'View My Leaves',
+        ctaHref: `${clientUrl}/leaves`,
+        signatureHtml: signature.html,
+    });
+
+    return sendEmail({
+        to: employeeEmail,
+        subject: `Leave Recorded (${dateRange}) - ${company}`,
+        html,
+        text: `Hello ${employeeName},\n\nA leave record (${leave.leaveType || leave.type || 'CASUAL'}, ${dateRange}, Status: ${leave.status || 'APPROVED'}) has been created for you by ${adminName || 'Admin'}.${leave.reason ? `\nReason: ${leave.reason}` : ''}${leave.reviewNotes ? `\nNotes: ${leave.reviewNotes}` : ''}\n\nView portal: ${clientUrl}/leaves${signature.text}`,
+    });
+}
+
+export async function sendLeaveUpdatedEmail({ leave, employeeEmail, employeeName, adminName, changesSummary = [] }) {
+    if (!employeeEmail) return;
+    const clientUrl = process.env.CLIENT_URL || '';
+    const company = 'Blindera Productions';
+    const signature = getEmailSignature(company);
+    const dateRange = formatLeaveDateRange(leave.startDate, leave.endDate);
+    const leaveType = escapeHtml(leave.leaveType || leave.type || 'CASUAL');
+    const safeStatus = escapeHtml(leave.status);
+    const safeReason = leave.reason ? escapeHtml(leave.reason) : '';
+    const safeEditNotes = leave.editNotes ? escapeHtml(leave.editNotes) : '';
+    const safeReviewNotes = leave.reviewNotes ? escapeHtml(leave.reviewNotes) : '';
+    const safeAdmin = escapeHtml(adminName || 'Admin');
+    const safeChanges = changesSummary.map((c) => escapeHtml(c)).join(', ');
+
+    const changesHtml = safeChanges
+        ? `<p style="margin: 0 0 8px 0; font-size: 14px; color: #334155;"><strong>Updated Fields:</strong> &nbsp;<span style="color: #0f172a;">${safeChanges}</span></p>`
+        : '';
+
+    const detailsRowsHtml = `
+      ${changesHtml}
+      <p style="margin: 0 0 8px 0; font-size: 14px; color: #334155;"><strong>Leave Type:</strong> &nbsp;<span style="color: #0f172a; font-weight: 600;">${leaveType}</span></p>
+      <p style="margin: 0 0 8px 0; font-size: 14px; color: #334155;"><strong>Dates:</strong> &nbsp;<span style="color: #0f172a; font-weight: 600;">${dateRange}</span></p>
+      <p style="margin: 0 0 8px 0; font-size: 14px; color: #334155;"><strong>Current Status:</strong> &nbsp;<span style="color: #0f172a; font-weight: 700;">${safeStatus}</span></p>
+      ${safeReason ? `<p style="margin: 0 0 8px 0; font-size: 14px; color: #334155;"><strong>Reason:</strong> &nbsp;<span style="color: #475569;">${safeReason}</span></p>` : ''}
+      ${safeEditNotes ? `<p style="margin: 0 0 8px 0; font-size: 14px; color: #334155;"><strong>Change Note:</strong> &nbsp;<span style="color: #475569;">${safeEditNotes}</span></p>` : ''}
+      ${safeReviewNotes ? `<p style="margin: 0; font-size: 14px; color: #334155;"><strong>Review Notes:</strong> &nbsp;<span style="color: #475569;">${safeReviewNotes}</span></p>` : ''}
+    `;
+
+    const html = buildLeaveEmailCard({
+        badgeText: 'Leave Record Updated',
+        badgeStyle: 'background: #dbeafe; color: #1d4ed8;',
+        title: 'Leave Details Updated by Management',
+        greetingName: employeeName || 'Team Member',
+        introHtml: `Please note that your leave record has been updated by <strong>${safeAdmin}</strong>. Here are your updated leave details:`,
+        detailsRowsHtml,
+        ctaLabel: 'View My Leaves',
+        ctaHref: `${clientUrl}/leaves`,
+        signatureHtml: signature.html,
+    });
+
+    return sendEmail({
+        to: employeeEmail,
+        subject: `Leave Record Updated (${dateRange}) - ${company}`,
+        html,
+        text: `Hello ${employeeName},\n\nYour leave record was updated by ${adminName || 'Admin'}.\nType: ${leave.leaveType || leave.type || 'CASUAL'}\nDates: ${dateRange}\nStatus: ${leave.status}${changesSummary.length ? `\nUpdated: ${changesSummary.join(', ')}` : ''}${leave.editNotes ? `\nNote: ${leave.editNotes}` : ''}\n\nView portal: ${clientUrl}/leaves${signature.text}`,
+    });
+}
+
+export async function sendLeaveDeletedEmail({ leave, employeeEmail, employeeName, adminName, deletionReason }) {
+    if (!employeeEmail) return;
+    const clientUrl = process.env.CLIENT_URL || '';
+    const company = 'Blindera Productions';
+    const signature = getEmailSignature(company);
+    const dateRange = formatLeaveDateRange(leave.startDate, leave.endDate);
+    const leaveType = escapeHtml(leave.leaveType || leave.type || 'CASUAL');
+    const safeAdmin = escapeHtml(adminName || 'Admin');
+    const safeDeletionReason = escapeHtml(deletionReason);
+
+    const detailsRowsHtml = `
+      <p style="margin: 0 0 8px 0; font-size: 14px; color: #334155;"><strong>Leave Type:</strong> &nbsp;<span style="color: #0f172a; font-weight: 600;">${leaveType}</span></p>
+      <p style="margin: 0 0 8px 0; font-size: 14px; color: #334155;"><strong>Dates:</strong> &nbsp;<span style="color: #0f172a; font-weight: 600;">${dateRange}</span></p>
+      <p style="margin: 0; font-size: 14px; color: #334155;"><strong>Reason for Removal:</strong> &nbsp;<span style="color: #be123c; font-weight: 600;">${safeDeletionReason}</span></p>
+    `;
+
+    const html = buildLeaveEmailCard({
+        badgeText: 'Leave Entry Removed',
+        badgeStyle: 'background: #ffe4e6; color: #be123c;',
+        title: 'Leave Record Removed',
+        greetingName: employeeName || 'Team Member',
+        introHtml: `This is a quick update to let you know that a leave entry under your account was removed by <strong>${safeAdmin}</strong> so your attendance and leave balance stay accurate:`,
+        detailsRowsHtml,
+        ctaLabel: 'Check Leave History',
+        ctaHref: `${clientUrl}/leaves`,
+        signatureHtml: signature.html,
+    });
+
+    return sendEmail({
+        to: employeeEmail,
+        subject: `Leave Record Removed (${dateRange}) - ${company}`,
+        html,
+        text: `Hello ${employeeName},\n\nA leave record (${leave.leaveType || leave.type || 'CASUAL'}, ${dateRange}) was removed by ${adminName || 'Admin'}.\nReason: ${deletionReason}\n\nCheck portal: ${clientUrl}/leaves${signature.text}`,
     });
 }
 
