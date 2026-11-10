@@ -7,7 +7,7 @@ import { PayrollStructure } from '../models/PayrollStructure.js';
 import { PasswordResetToken } from '../models/PasswordResetToken.js';
 import { verifyPassword, hashPassword, createSessionToken, generateResetToken, hashResetToken, AUTH_COOKIE_NAME, authenticateToken, } from '../middleware/auth.js';
 import { logAuditEvent } from '../services/audit.js';
-import { sendPasswordResetEmail } from '../services/email.js';
+import { sendPasswordResetEmail, getRequestClientUrl } from '../services/email.js';
 const router = Router();
 const LoginSchema = z.object({
     username: z.string().min(1, 'Username is required').trim().toLowerCase(),
@@ -282,6 +282,7 @@ router.post('/forgot-password', async (req, res) => {
                 to: user.email,
                 name: user.name,
                 token,
+                clientUrl: getRequestClientUrl(req),
             });
             await logAuditEvent({
                 actorId: user._id.toString(),

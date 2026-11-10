@@ -10,6 +10,7 @@ import {
     sendAdminRecordedLeaveEmail,
     sendLeaveUpdatedEmail,
     sendLeaveDeletedEmail,
+    getRequestClientUrl,
 } from '../services/email.js';
 import { logAuditEvent } from '../services/audit.js';
 import { calculateEmployeeLeaveBalances } from '../services/leave-accrual-engine.js';
@@ -251,6 +252,7 @@ router.post('/', async (req, res) => {
                     employeeEmail: targetEmployeeEmail,
                     employeeName: targetEmployeeName,
                     adminName: actorName,
+                    clientUrl: getRequestClientUrl(req),
                 });
             } catch (emailErr) {
                 console.warn('[EmailNotification:LeaveCreate] Non-fatal email error:', emailErr);
@@ -275,6 +277,7 @@ router.post('/', async (req, res) => {
                     employeeEmail: targetEmployeeEmail,
                     employeeName: targetEmployeeName,
                     adminEmails,
+                    clientUrl: getRequestClientUrl(req),
                 });
             } catch (emailErr) {
                 console.warn('[EmailNotification:Leave] Non-fatal email error:', emailErr);
@@ -452,6 +455,7 @@ const handleUpdateLeave = async (req, res) => {
                     employeeEmail: targetUser?.email,
                     employeeName: updated.employeeName,
                     reviewerName: actorName,
+                    clientUrl: getRequestClientUrl(req),
                 });
             } else {
                 await sendLeaveUpdatedEmail({
@@ -460,6 +464,7 @@ const handleUpdateLeave = async (req, res) => {
                     employeeName: updated.employeeName,
                     adminName: actorName,
                     changesSummary,
+                    clientUrl: getRequestClientUrl(req),
                 });
             }
         } catch (emailErr) {
@@ -550,6 +555,7 @@ const handleDeleteLeave = async (req, res) => {
                 employeeName: existing.employeeName || empUser?.name,
                 adminName: actorName,
                 deletionReason,
+                clientUrl: getRequestClientUrl(req),
             });
         } catch (emailErr) {
             console.warn('[EmailNotification:LeaveDelete] Non-fatal email error:', emailErr);

@@ -6,6 +6,8 @@ import {
   sendAdminRecordedLeaveEmail,
   sendLeaveUpdatedEmail,
   sendLeaveDeletedEmail,
+  resolveEmailBaseUrl,
+  getRequestClientUrl,
 } from '../services/email.js';
 
 describe('LeaveRequest Model & Email Notifications', () => {
@@ -88,5 +90,26 @@ describe('LeaveRequest Model & Email Notifications', () => {
     expect(typeof sendAdminRecordedLeaveEmail).toBe('function');
     expect(typeof sendLeaveUpdatedEmail).toBe('function');
     expect(typeof sendLeaveDeletedEmail).toBe('function');
+  });
+
+  it('should strip localhost/127.0.0.1 from email links while keeping public URLs', () => {
+    const prevClientUrl = process.env.CLIENT_URL;
+    const prevVercel = process.env.VERCEL_URL;
+    try {
+      process.env.CLIENT_URL = 'http://localhost:3000';
+      delete process.env.VERCEL_URL;
+
+      expect(resolveEmailBaseUrl()).toBe('');
+      expect(resolveEmailBaseUrl('http://localhost:3000')).toBe('');
+      expect(resolveEmailBaseUrl('http://127.0.0.1:3000')).toBe('');
+      expect(resolveEmailBaseUrl('https://portal.blinderaproductions.com/')).toBe('https://portal.blinderaproductions.com');
+
+      expect(getRequestClientUrl({ headers: { origin: 'http://localhost:3000' } })).toBe('');
+      expect(getRequestClientUrl({ headers: { origin: 'https://bp-ams.vercel.app' } })).toBe('https://bp-ams.vercel.app');
+    } finally {
+      if (prevClientUrl !== undefined) process.env.CLIENT_URL = prevClientUrl;
+      else delete process.env.CLIENT_URL;
+      if (prevVercel !== undefined) process.env.VERCEL_URL = prevVercel;
+    }
   });
 });

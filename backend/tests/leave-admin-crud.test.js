@@ -41,6 +41,7 @@ vi.mock('../services/email.js', () => ({
     sendLeaveDeletedEmail: mockSendLeaveDeletedEmail,
     sendLeaveDecisionEmail: mockSendLeaveDecisionEmail,
     sendLeaveApplicationEmails: mockSendLeaveApplicationEmails,
+    getRequestClientUrl: vi.fn().mockReturnValue(''),
 }));
 
 vi.mock('../services/pushNotification.js', () => ({

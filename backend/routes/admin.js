@@ -9,7 +9,7 @@ import { Task } from '../models/Task.js';
 import { Deliverable } from '../models/Deliverable.js';
 import { authenticateToken, requireManagerOrAdmin, hashPassword } from '../middleware/auth.js';
 import { logAuditEvent } from '../services/audit.js';
-import { sendEmail, sendWelcomeEmail, sendAdminPasswordResetEmail } from '../services/email.js';
+import { sendEmail, sendWelcomeEmail, sendAdminPasswordResetEmail, getRequestClientUrl } from '../services/email.js';
 import { calculateLateCheckIn, getEmployeeShiftConfig } from '../services/attendance.js';
 import { getTodayDateString } from '../utils/index.js';
 const router = Router();
@@ -155,6 +155,7 @@ router.post('/employees', async (req, res) => {
                     name: newEmployee.name,
                     username: newEmployee.username,
                     temporaryPassword: initialPassword,
+                    clientUrl: getRequestClientUrl(req),
                 });
                 if (!emailResult?.success) {
                     console.warn('[API:Admin] Welcome email was not delivered:', emailResult?.error);
@@ -260,6 +261,7 @@ router.post('/employees/:id/reset-password', async (req, res) => {
                     to: employee.email,
                     name: employee.name,
                     temporaryPassword: newPassword,
+                    clientUrl: getRequestClientUrl(req),
                 });
                 if (!emailResult?.success) {
                     console.warn('[API:Admin] Admin reset password email was not delivered:', emailResult?.error);
@@ -701,12 +703,12 @@ router.post('/test-email', async (req, res) => {
         const recipient = toEmail || req.user?.email || process.env.ADMIN_EMAIL || process.env.SMTP_USER;
         const result = await sendEmail({
             to: recipient,
-            subject: 'BP AMS System - Email Delivery Test',
-            text: `This is a test notification dispatched by ${req.user.name} on ${new Date().toLocaleString()}. If you received this, SMTP email is working correctly.`,
+            subject: 'Blindera Productions — SMTP Email Configuration Verified',
+            text: `This is a confirmation email dispatched by ${req.user.name} on ${new Date().toLocaleString()}. Your Blindera Productions email transport is configured and working properly.`,
             html: `
-                <div style="font-family: sans-serif; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; max-width: 500px;">
-                    <h3 style="color: #2563eb; margin: 0 0 12px 0;">BP AMS Email Verification</h3>
-                    <p style="color: #334155; margin: 0 0 16px 0;">This email confirms that the notification transport configured in BP AMS is communicating successfully with Gmail SMTP.</p>
+                <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; max-width: 500px;">
+                    <h3 style="color: #e11d48; margin: 0 0 12px 0;">Blindera Productions — Email Verification</h3>
+                    <p style="color: #334155; margin: 0 0 16px 0;">This email confirms that the notification transport configured for Blindera Productions Attendance System is communicating successfully with SMTP.</p>
                     <p style="font-size: 12px; color: #64748b; margin: 0;">Dispatched by: <strong>${req.user.name}</strong> (${req.user.role})<br>Timestamp: ${new Date().toISOString()}</p>
                 </div>
             `,
