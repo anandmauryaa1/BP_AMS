@@ -346,39 +346,39 @@ export default function EmployeeDashboardClient({
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24 md:pb-10">
         {/* Top Header Card */}
-        <div className="bg-slate-900 dark:bg-slate-900 border border-slate-800 rounded-2xl p-6 mb-6 shadow-sm text-white">
+        <div className="bg-slate-900 dark:bg-slate-900 border border-slate-800 rounded-2xl p-4 sm:p-6 mb-6 shadow-sm text-white overflow-hidden">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
+            <div className="flex items-start sm:items-center gap-3.5 sm:gap-4 min-w-0">
               <Link href="/profile" className="shrink-0 group" title="View & update your profile photo">
-                <div className="w-13 h-13 sm:w-14 sm:h-14 aspect-square rounded-2xl overflow-hidden border-2 border-slate-700 bg-slate-800 flex items-center justify-center font-extrabold text-xl text-rose-400 shadow-lg shadow-rose-950/40 group-hover:border-rose-500 transition-all">
+                <div className="w-12 h-12 sm:w-14 sm:h-14 aspect-square rounded-2xl overflow-hidden border-2 border-slate-700 bg-slate-800 flex items-center justify-center font-extrabold text-lg sm:text-xl text-rose-400 shadow-lg shadow-rose-950/40 group-hover:border-rose-500 transition-all">
                   {user?.avatar ? (
-                    <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
+                    <img src={user.avatar} alt={user.name || 'User'} className="w-full h-full object-cover" />
                   ) : (
                     <span>{(user?.name || 'U').charAt(0).toUpperCase()}</span>
                   )}
                 </div>
               </Link>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-rose-400 bg-rose-950/80 px-2 py-0.5 rounded border border-rose-800/60">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-rose-400 bg-rose-950/80 px-2 py-0.5 rounded border border-rose-800/60">
                     {user?.department || 'Blindera Productions'}
                   </span>
                   {user?.employeeId && (
                     <span className="text-xs font-mono text-slate-400">ID: {user.employeeId}</span>
                   )}
                 </div>
-                <h1 className="text-xl sm:text-2xl font-bold mt-1 text-white tracking-tight flex items-center gap-2">
+                <h1 className="text-lg sm:text-2xl font-bold mt-1 text-white tracking-tight flex flex-wrap items-center gap-x-2">
                   {getTimeBasedGreeting(currentTime || undefined)}, {user?.name ? user.name : <Skeleton className="h-7 w-40 bg-slate-700/70" />}
                 </h1>
                 <p className="text-xs text-slate-300 mt-0.5 flex items-center gap-1.5" suppressHydrationWarning>
-                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                  <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                   {currentTime ? formatDate(currentTime) : ''}
                 </p>
               </div>
             </div>
 
             {/* Live Studio Clock */}
-            <div className="bg-slate-800/90 border border-slate-700/80 rounded-xl px-4 py-3 text-right self-start sm:self-auto">
+            <div className="bg-slate-800/90 border border-slate-700/80 rounded-xl px-4 py-2.5 sm:py-3 text-left sm:text-right w-full sm:w-auto shrink-0">
               <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
                 Studio Clock
               </div>

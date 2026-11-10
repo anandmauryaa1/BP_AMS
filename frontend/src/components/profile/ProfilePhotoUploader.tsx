@@ -186,7 +186,7 @@ export const ProfilePhotoUploader: React.FC<ProfilePhotoUploaderProps> = ({
 
           {/* Uploading overlay */}
           {isUploading && (
-            <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center text-white">
+            <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center text-white">
               <Loader2 className="w-6 h-6 animate-spin text-rose-400" />
             </div>
           )}
