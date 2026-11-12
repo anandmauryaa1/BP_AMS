@@ -431,6 +431,9 @@ export function computeAdminAttendancePatch({
     checkOut,
     isLate,
     lateMinutes,
+    notes,
+    reason,
+    markedBy,
     shiftCfg = { shiftStartTime: '09:30', graceMinutes: 15 },
 }) {
     const base = existing || {
@@ -442,7 +445,29 @@ export function computeAdminAttendancePatch({
         lateMinutes: 0,
         scheduledShiftStart: shiftCfg.shiftStartTime || '09:30',
         lateGraceMinutes: shiftCfg.graceMinutes ?? 15,
+        notes: '',
     };
+
+    const nextNotes = notes !== undefined
+        ? String(notes || '').trim()
+        : reason !== undefined
+            ? String(reason || '').trim()
+            : base.notes || '';
+
+    if (status === 'ABSENT') {
+        return {
+            status: 'ABSENT',
+            checkIn: null,
+            checkOut: null,
+            isLate: false,
+            lateMinutes: 0,
+            scheduledShiftStart: shiftCfg.shiftStartTime || base.scheduledShiftStart || '09:30',
+            lateGraceMinutes: shiftCfg.graceMinutes ?? base.lateGraceMinutes ?? 15,
+            totalWorkingMinutes: 0,
+            notes: nextNotes,
+            ...(markedBy ? { markedBy } : {}),
+        };
+    }
 
     const parseOptionalDate = (val, fallback, label) => {
         if (val === undefined) return fallback ? new Date(fallback) : null;
@@ -515,5 +540,7 @@ export function computeAdminAttendancePatch({
         scheduledShiftStart: lateCalc.scheduledShiftStart,
         lateGraceMinutes: lateCalc.lateGraceMinutes,
         totalWorkingMinutes: nextTotalWorkingMinutes,
+        notes: nextNotes,
+        ...(markedBy ? { markedBy } : {}),
     };
 }

@@ -56,6 +56,8 @@ const AttendanceSchema = new Schema({
     lateMinutes: { type: Number, default: 0 },
     scheduledShiftStart: { type: String, default: '09:30' },
     lateGraceMinutes: { type: Number, default: 15 },
+    notes: { type: String, trim: true },
+    markedBy: { type: String, trim: true },
     correction: CorrectionSchema,
 }, {
     timestamps: true,

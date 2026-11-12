@@ -727,7 +727,7 @@ export const AttendanceCalendarModal: React.FC<AttendanceCalendarModalProps> = (
       setCheckOut(toLocalDateTimeInput(record.checkOut));
       setIsLate(Boolean(record.isLate || (record.lateMinutes && record.lateMinutes > 0)));
       setLateMinutes(String(record.lateMinutes || 0));
-      setReason('');
+      setReason(record.notes || '');
     } else {
       setEmployeeId(employees[0]?.employeeId || '');
       setDate(defaultDate);
@@ -739,6 +739,25 @@ export const AttendanceCalendarModal: React.FC<AttendanceCalendarModalProps> = (
       setReason('');
     }
   }, [isOpen, record, defaultDate, employees]);
+
+  const isAbsentMode = status === 'ABSENT';
+
+  const handleSelectMarkMode = (mode: 'PRESENT' | 'ABSENT') => {
+    setError(null);
+    if (mode === 'ABSENT') {
+      setStatus('ABSENT');
+      setCheckIn('');
+      setCheckOut('');
+      setIsLate(false);
+      setLateMinutes('0');
+    } else {
+      const nextStatus = checkOut ? 'COMPLETED' : 'PRESENT';
+      setStatus(nextStatus);
+      if (!checkIn && date) {
+        setCheckIn(`${date}T09:30`);
+      }
+    }
+  };
 
   const handleAutoCalcLate = () => {
     const shiftStart = record?.scheduledShiftStart || '09:30';
@@ -772,7 +791,11 @@ export const AttendanceCalendarModal: React.FC<AttendanceCalendarModalProps> = (
       setError('Please select an employee');
       return;
     }
-    if (checkIn && checkOut && new Date(checkOut) < new Date(checkIn)) {
+    if (isAbsentMode && !reason.trim()) {
+      setError('Absent reason is required when marking an employee as Absent.');
+      return;
+    }
+    if (!isAbsentMode && checkIn && checkOut && new Date(checkOut) < new Date(checkIn)) {
       setError('Check-out timestamp cannot be earlier than check-in timestamp');
       return;
     }
@@ -789,11 +812,12 @@ export const AttendanceCalendarModal: React.FC<AttendanceCalendarModalProps> = (
           employeeId,
           date,
           status,
-          checkIn: checkIn ? new Date(checkIn).toISOString() : null,
-          checkOut: checkOut ? new Date(checkOut).toISOString() : null,
-          isLate,
-          lateMinutes: isLate ? Math.max(0, Number(lateMinutes) || 0) : 0,
+          checkIn: isAbsentMode ? null : checkIn ? new Date(checkIn).toISOString() : null,
+          checkOut: isAbsentMode ? null : checkOut ? new Date(checkOut).toISOString() : null,
+          isLate: isAbsentMode ? false : isLate,
+          lateMinutes: isAbsentMode ? 0 : isLate ? Math.max(0, Number(lateMinutes) || 0) : 0,
           reason: reason.trim() || 'Admin calendar attendance update',
+          notes: reason.trim(),
         }),
       });
       const data = await res.json();
@@ -821,9 +845,9 @@ export const AttendanceCalendarModal: React.FC<AttendanceCalendarModalProps> = (
       title={
         isEdit
           ? `Update Attendance — ${record.employeeName || record.employeeId} (${record.date})`
-          : 'Log / Update Employee Attendance'
+          : 'Mark / Update Employee Attendance'
       }
-      description="Update check-in, check-out, shift status, and late status/minutes directly with audit logging."
+      description="Mark an employee Present or Absent (with reason), or adjust check-in, check-out, and late minutes."
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         {error && (
@@ -832,6 +856,37 @@ export const AttendanceCalendarModal: React.FC<AttendanceCalendarModalProps> = (
             <span>{error}</span>
           </div>
         )}
+
+        {/* Present / Absent Quick Selector */}
+        <div>
+          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1.5">
+            Attendance Decision
+          </label>
+          <div className="grid grid-cols-2 gap-2.5">
+            <button
+              type="button"
+              onClick={() => handleSelectMarkMode('PRESENT')}
+              className={`px-3 py-2 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 ${
+                !isAbsentMode
+                  ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500/40'
+                  : 'bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900'
+              }`}
+            >
+              Present / Shift Log
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSelectMarkMode('ABSENT')}
+              className={`px-3 py-2 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-2 ${
+                isAbsentMode
+                  ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-500 text-rose-700 dark:text-rose-300 ring-1 ring-rose-500/40'
+                  : 'bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900'
+              }`}
+            >
+              Absent (Reason Required)
+            </button>
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
@@ -865,7 +920,7 @@ export const AttendanceCalendarModal: React.FC<AttendanceCalendarModalProps> = (
               onChange={(e) => {
                 const nextDate = e.target.value;
                 setDate(nextDate);
-                if (!isEdit && nextDate) {
+                if (!isEdit && nextDate && !isAbsentMode) {
                   setCheckIn(`${nextDate}T09:30`);
                   setCheckOut(`${nextDate}T18:30`);
                 }
@@ -880,7 +935,15 @@ export const AttendanceCalendarModal: React.FC<AttendanceCalendarModalProps> = (
             </label>
             <select
               value={status}
-              onChange={(e) => setStatus(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === 'ABSENT') {
+                  handleSelectMarkMode('ABSENT');
+                } else {
+                  setStatus(val);
+                  if (!checkIn && date) setCheckIn(`${date}T09:30`);
+                }
+              }}
               className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg font-semibold"
             >
               {ATTENDANCE_STATUS_OPTIONS.map((st) => (
@@ -890,113 +953,126 @@ export const AttendanceCalendarModal: React.FC<AttendanceCalendarModalProps> = (
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide">
-                Check-In Time
-              </label>
-              {checkIn && (
+        {isAbsentMode ? (
+          <div className="p-3.5 rounded-xl bg-rose-50/70 dark:bg-rose-950/25 border border-rose-200 dark:border-rose-900/60 text-xs text-rose-800 dark:text-rose-200">
+            This employee will be marked <span className="font-bold">ABSENT</span> for {date}. Any check-in, check-out, or late minutes for this day will be cleared. Please provide the reason below.
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide">
+                    Check-In Time
+                  </label>
+                  {checkIn && (
+                    <button
+                      type="button"
+                      onClick={() => handleCheckInChange('')}
+                      className="text-[11px] text-rose-600 dark:text-rose-400 hover:underline"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="datetime-local"
+                  value={checkIn}
+                  onChange={(e) => handleCheckInChange(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide">
+                    Check-Out Time
+                  </label>
+                  {checkOut && (
+                    <button
+                      type="button"
+                      onClick={() => setCheckOut('')}
+                      className="text-[11px] text-rose-600 dark:text-rose-400 hover:underline"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="datetime-local"
+                  value={checkOut}
+                  onChange={(e) => setCheckOut(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg"
+                />
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/25 border border-amber-200 dark:border-amber-900/60 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label className="flex items-center gap-2.5 text-xs font-semibold text-slate-800 dark:text-slate-100 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isLate}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setIsLate(checked);
+                      if (!checked) setLateMinutes('0');
+                      else if (Number(lateMinutes) <= 0) setLateMinutes('15');
+                    }}
+                    className="w-4 h-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                  />
+                  Mark Check-In as Late
+                </label>
                 <button
                   type="button"
-                  onClick={() => handleCheckInChange('')}
-                  className="text-[11px] text-rose-600 dark:text-rose-400 hover:underline"
+                  onClick={handleAutoCalcLate}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 dark:text-amber-300 hover:underline"
                 >
-                  Clear
+                  <Wand2 className="w-3 h-3" />
+                  Auto-calc from shift ({record?.scheduledShiftStart || '09:30'})
                 </button>
-              )}
-            </div>
-            <input
-              type="datetime-local"
-              value={checkIn}
-              onChange={(e) => handleCheckInChange(e.target.value)}
-              className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg"
-            />
-          </div>
+              </div>
 
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide">
-                Check-Out Time
-              </label>
-              {checkOut && (
-                <button
-                  type="button"
-                  onClick={() => setCheckOut('')}
-                  className="text-[11px] text-rose-600 dark:text-rose-400 hover:underline"
-                >
-                  Clear
-                </button>
-              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-1">
+                    Late Minutes
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={720}
+                    disabled={!isLate}
+                    value={isLate ? lateMinutes : '0'}
+                    onChange={(e) => setLateMinutes(e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg disabled:opacity-50"
+                  />
+                </div>
+                <div className="text-xs text-slate-600 dark:text-slate-300 bg-white/70 dark:bg-slate-900/60 px-3 py-2 rounded-lg border border-amber-200/70 dark:border-amber-900/40 flex items-center justify-between">
+                  <span className="font-medium">Working Hours Preview:</span>
+                  <span className="font-bold text-slate-900 dark:text-white">
+                    {previewWorkingMinutes > 0 ? formatMinutes(previewWorkingMinutes) : '--'}
+                  </span>
+                </div>
+              </div>
             </div>
-            <input
-              type="datetime-local"
-              value={checkOut}
-              onChange={(e) => setCheckOut(e.target.value)}
-              className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg"
-            />
-          </div>
-        </div>
-
-        <div className="p-3.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/25 border border-amber-200 dark:border-amber-900/60 space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <label className="flex items-center gap-2.5 text-xs font-semibold text-slate-800 dark:text-slate-100 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={isLate}
-                onChange={(e) => {
-                  const checked = e.target.checked;
-                  setIsLate(checked);
-                  if (!checked) setLateMinutes('0');
-                  else if (Number(lateMinutes) <= 0) setLateMinutes('15');
-                }}
-                className="w-4 h-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
-              />
-              Mark Check-In as Late
-            </label>
-            <button
-              type="button"
-              onClick={handleAutoCalcLate}
-              className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 dark:text-amber-300 hover:underline"
-            >
-              <Wand2 className="w-3 h-3" />
-              Auto-calc from shift ({record?.scheduledShiftStart || '09:30'})
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-1">
-                Late Minutes
-              </label>
-              <input
-                type="number"
-                min={0}
-                max={720}
-                disabled={!isLate}
-                value={isLate ? lateMinutes : '0'}
-                onChange={(e) => setLateMinutes(e.target.value)}
-                className="w-full px-3 py-1.5 text-xs bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg disabled:opacity-50"
-              />
-            </div>
-            <div className="text-xs text-slate-600 dark:text-slate-300 bg-white/70 dark:bg-slate-900/60 px-3 py-2 rounded-lg border border-amber-200/70 dark:border-amber-900/40 flex items-center justify-between">
-              <span className="font-medium">Working Hours Preview:</span>
-              <span className="font-bold text-slate-900 dark:text-white">
-                {previewWorkingMinutes > 0 ? formatMinutes(previewWorkingMinutes) : '--'}
-              </span>
-            </div>
-          </div>
-        </div>
+          </>
+        )}
 
         <div>
           <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1">
-            Audit Reason
+            {isAbsentMode ? 'Absent Reason *' : 'Audit Reason / Notes'}
           </label>
           <input
             type="text"
+            required={isAbsentMode}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder="e.g. Manual check-in/out correction or waived late penalty"
+            placeholder={
+              isAbsentMode
+                ? 'e.g. Uninformed absence, medical rest, personal emergency'
+                : 'e.g. Manual check-in/out correction or waived late penalty'
+            }
             className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg"
           />
         </div>

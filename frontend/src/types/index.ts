@@ -7,6 +7,7 @@ export type AttendanceStatus =
   | 'ON_BREAK'
   | 'COMPLETED'
   | 'ABSENT'
+  | 'ON_LEAVE'
   | 'MISSED_CHECKOUT';
 
 export type CorrectionStatus = 'NONE' | 'PENDING' | 'APPROVED' | 'REJECTED';
@@ -156,6 +157,8 @@ export interface IAttendance {
   lateMinutes?: number;
   scheduledShiftStart?: string;
   lateGraceMinutes?: number;
+  notes?: string;
+  markedBy?: string;
   correction?: IAttendanceCorrection;
   createdAt: Date;
   updatedAt: Date;
@@ -488,9 +491,20 @@ export interface IEmployeeDailyReport {
     presenceMinutes: number;
     breakMinutes: number;
     workingMinutes: number;
+    isLate?: boolean;
     lateMinutes: number;
     earlyCheckoutMinutes: number;
     missedCheckout: boolean;
+    notes?: string;
+    leave?: {
+      onLeave: boolean;
+      status?: LeaveStatus | string;
+      leaveType?: LeaveType | string;
+      isPaid?: boolean;
+      startDate?: string;
+      endDate?: string;
+      reason?: string;
+    } | null;
   };
   work: {
     projectsWorked: number;
@@ -535,6 +549,17 @@ export interface IEmployeeDailyReport {
   updatedAt: Date;
 }
 
+export interface IReportLeaveDetail {
+  id?: string;
+  leaveType: string;
+  status: string;
+  isPaid: boolean;
+  startDate: string;
+  endDate: string;
+  daysInRange: number;
+  reason?: string;
+}
+
 export interface IEmployeeWeeklyReport {
   _id: string;
   employeeId: string;
@@ -545,12 +570,17 @@ export interface IEmployeeWeeklyReport {
     presentDays: number;
     absentDays: number;
     leaveDays: number;
+    paidLeaveDays?: number;
+    unpaidLeaveDays?: number;
+    pendingLeaveDays?: number;
     totalPresenceMinutes: number;
     totalWorkingMinutes: number;
     totalBreakMinutes: number;
     averageDailyWorkingMinutes: number;
     lateCount: number;
+    totalLateMinutes?: number;
     missedCheckoutCount: number;
+    leaveDetails?: IReportLeaveDetail[];
   };
   work: {
     totalProjects: number;
@@ -604,12 +634,17 @@ export interface IEmployeeMonthlyReport {
     presentDays: number;
     absentDays: number;
     leaveDays: number;
+    paidLeaveDays?: number;
+    unpaidLeaveDays?: number;
+    pendingLeaveDays?: number;
     totalPresenceMinutes: number;
     totalWorkingMinutes: number;
     totalBreakMinutes: number;
     averageDailyWorkingMinutes: number;
     lateCount: number;
+    totalLateMinutes?: number;
     missedCheckoutCount: number;
+    leaveDetails?: IReportLeaveDetail[];
   };
   work: {
     projectsWorked: number;

@@ -4,6 +4,7 @@ import { Attendance } from '../models/Attendance.js';
 import { User } from '../models/User.js';
 import { authenticateToken, requireManagerOrAdmin } from '../middleware/auth.js';
 import { getTodayAttendance, checkIn, startBreak, endBreak, checkOut, } from '../services/attendance.js';
+import { invalidateReportsForEmployee } from '../services/report-generator.js';
 import { getTodayDateString } from '../utils/index.js';
 import { validateGeofenceCheckIn } from '../services/geofence-service.js';
 import {
@@ -110,6 +111,11 @@ router.post('/check-in', async (req, res) => {
         if (!result.success) {
             return res.status(400).json(result);
         }
+        await invalidateReportsForEmployee({
+            employeeId,
+            startDate: result.attendance?.date || getTodayDateString(),
+            endDate: result.attendance?.date || getTodayDateString(),
+        });
         if (result.attendance?.isLate) {
             try {
                 const stakeholders = await resolveStakeholders({
@@ -147,6 +153,11 @@ router.post(['/break-start', '/break/start'], async (req, res) => {
         if (!result.success) {
             return res.status(400).json(result);
         }
+        await invalidateReportsForEmployee({
+            employeeId,
+            startDate: result.attendance?.date || getTodayDateString(),
+            endDate: result.attendance?.date || getTodayDateString(),
+        });
         return res.json(result);
     }
     catch (error) {
@@ -165,6 +176,11 @@ router.post(['/break-end', '/break/end'], async (req, res) => {
         if (!result.success) {
             return res.status(400).json(result);
         }
+        await invalidateReportsForEmployee({
+            employeeId,
+            startDate: result.attendance?.date || getTodayDateString(),
+            endDate: result.attendance?.date || getTodayDateString(),
+        });
         return res.json(result);
     }
     catch (error) {
@@ -184,6 +200,11 @@ router.post('/check-out', async (req, res) => {
         if (!result.success) {
             return res.status(400).json(result);
         }
+        await invalidateReportsForEmployee({
+            employeeId,
+            startDate: result.attendance?.date || getTodayDateString(),
+            endDate: result.attendance?.date || getTodayDateString(),
+        });
         return res.json(result);
     }
     catch (error) {

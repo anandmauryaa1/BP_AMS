@@ -4,8 +4,8 @@ import { getEmployees, getProjects } from '@/lib/server-api';
 import { CommonOperationsCalendar } from '@/components/calendar/CommonOperationsCalendar';
 
 export const metadata: Metadata = {
-  title: 'Common Operations Calendar — BP AMS',
-  description: 'Unified calendar for production tasks, employee leaves, and attendance check-in/out & late tracking.',
+  title: 'All-In-One Calendar — BP AMS',
+  description: 'Unified All-In-One Calendar for production tasks, employee leaves, and attendance check-in/out & late tracking.',
 };
 
 export default async function AdminOperationsCalendarPage() {
@@ -15,7 +15,7 @@ export default async function AdminOperationsCalendarPage() {
     <Suspense
       fallback={
         <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 flex items-center justify-center text-sm text-slate-500">
-          Loading Unified Operations Calendar...
+          Loading All-In-One Calendar...
         </div>
       }
     >

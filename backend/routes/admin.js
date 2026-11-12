@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { connectToDatabase } from '../db.js';
 import { User } from '../models/User.js';
 import { Attendance } from '../models/Attendance.js';
+import { LeaveRequest } from '../models/LeaveRequest.js';
 import { AuditLog } from '../models/AuditLog.js';
 import { Project } from '../models/Project.js';
 import { Task } from '../models/Task.js';
@@ -19,6 +20,8 @@ import {
 } from '../services/email.js';
 import { resolveStakeholders } from '../services/stakeholders.js';
 import { calculateLateCheckIn, computeAdminAttendancePatch, getEmployeeShiftConfig } from '../services/attendance.js';
+import { invalidateReportsForEmployee } from '../services/report-generator.js';
+import { summarizeLeavesInRange, countLeaveDaysInRange } from '../services/leave-utils.js';
 import { getTodayDateString } from '../utils/index.js';
 const router = Router();
 const CreateEmployeeSchema = z.object({
@@ -406,17 +409,45 @@ router.get('/reports', async (req, res) => {
         };
 
         // 3. Historical range analytics for report export
-        const attendanceRecords = await Attendance.find({
-            date: { $gte: startDate, $lte: endDate },
-        }).lean();
-        const users = await User.find({ status: 'ACTIVE' }).select('name employeeId department').lean();
+        const [attendanceRecords, users, leaveRequests] = await Promise.all([
+            Attendance.find({
+                date: { $gte: startDate, $lte: endDate },
+            }).lean(),
+            User.find({ status: 'ACTIVE' }).select('name employeeId department').lean(),
+            LeaveRequest.find({
+                isDeleted: { $ne: true },
+                startDate: { $lte: endDate },
+                endDate: { $gte: startDate },
+            }).lean(),
+        ]);
         const userMap = new Map(users.map((u) => [u.employeeId, u]));
         const deptMap = {};
+        const empSummaryMap = new Map();
+        const ensureEmpSummary = (empId, empName, dept) => {
+            if (!empSummaryMap.has(empId)) {
+                empSummaryMap.set(empId, {
+                    employeeId: empId,
+                    employeeName: empName || empId,
+                    department: dept || 'Unassigned',
+                    presentDays: 0,
+                    absentDays: 0,
+                    lateDays: 0,
+                    totalLateMinutes: 0,
+                    totalWorkingMinutes: 0,
+                    leaveDays: 0,
+                    paidLeaveDays: 0,
+                    unpaidLeaveDays: 0,
+                    pendingLeaveDays: 0,
+                });
+            }
+            return empSummaryMap.get(empId);
+        };
 
         for (const u of users) {
             if (u.department) {
                 deptMap[u.department] = 0;
             }
+            ensureEmpSummary(u.employeeId, u.name, u.department);
         }
 
         const records = [];
@@ -425,6 +456,19 @@ router.get('/reports', async (req, res) => {
             const dept = u?.department || 'Unassigned';
             const mins = att.totalWorkingMinutes || 0;
             deptMap[dept] = (deptMap[dept] || 0) + mins;
+            const isLate = Boolean(att.isLate || (att.lateMinutes && att.lateMinutes > 0));
+            const empSummary = ensureEmpSummary(att.employeeId, u?.name || att.employeeName, dept);
+            if (['PRESENT', 'COMPLETED', 'ON_BREAK'].includes(att.status)) {
+                empSummary.presentDays++;
+                if (isLate) {
+                    empSummary.lateDays++;
+                    empSummary.totalLateMinutes += Number(att.lateMinutes || 0);
+                }
+            } else if (att.status === 'ABSENT') {
+                empSummary.absentDays++;
+            }
+            empSummary.totalWorkingMinutes += mins;
+
             records.push({
                 _id: att._id,
                 employeeId: att.employeeId,
@@ -436,12 +480,49 @@ router.get('/reports', async (req, res) => {
                 checkOut: att.checkOut,
                 totalWorkingMinutes: mins,
                 totalBreakMinutes: att.totalBreakMinutes || 0,
-                isLate: Boolean(att.isLate || (att.lateMinutes && att.lateMinutes > 0)),
+                isLate,
                 lateMinutes: att.lateMinutes || 0,
                 scheduledShiftStart: att.scheduledShiftStart || '09:30',
                 lateGraceMinutes: att.lateGraceMinutes || 15,
+                notes: att.notes || '',
             });
         }
+
+        const empLeaveBuckets = new Map();
+        const leaves = [];
+        for (const lv of leaveRequests) {
+            const empKey = lv.employeeId;
+            if (!empLeaveBuckets.has(empKey)) empLeaveBuckets.set(empKey, []);
+            empLeaveBuckets.get(empKey).push(lv);
+            const daysInRange = countLeaveDaysInRange(lv.startDate, lv.endDate, startDate, endDate);
+            if (daysInRange > 0) {
+                const u = userMap.get(lv.employeeId);
+                leaves.push({
+                    id: lv._id?.toString(),
+                    employeeId: lv.employeeId,
+                    employeeName: lv.employeeName || u?.name || lv.employeeId,
+                    department: u?.department || 'Unassigned',
+                    leaveType: lv.leaveType || lv.type || 'CASUAL',
+                    status: lv.status,
+                    startDate: lv.startDate,
+                    endDate: lv.endDate,
+                    daysInRange,
+                    reason: lv.reason || '',
+                });
+            }
+        }
+        for (const [empKey, empLeaves] of empLeaveBuckets.entries()) {
+            const u = userMap.get(empKey);
+            const empSummary = ensureEmpSummary(empKey, empLeaves[0]?.employeeName || u?.name, u?.department);
+            const ls = summarizeLeavesInRange(empLeaves, startDate, endDate);
+            empSummary.leaveDays = ls.approvedLeaveDays;
+            empSummary.paidLeaveDays = ls.approvedPaidLeaveDays;
+            empSummary.unpaidLeaveDays = ls.unpaidLeaveDays;
+            empSummary.pendingLeaveDays = ls.pendingLeaveDays;
+        }
+        const leaveSummary = summarizeLeavesInRange(leaveRequests, startDate, endDate);
+        const employeeBreakdown = Array.from(empSummaryMap.values());
+
         const departmentBreakdown = Object.entries(deptMap).map(([department, totalMinutes]) => ({
             department,
             totalMinutes,
@@ -457,6 +538,9 @@ router.get('/reports', async (req, res) => {
                     startDate,
                     endDate,
                     departmentBreakdown,
+                    employeeBreakdown,
+                    leaveSummary,
+                    leaves,
                     records,
                 },
             },
@@ -580,6 +664,7 @@ router.get('/attendance', async (req, res) => {
                     lateMinutes: att.lateMinutes || 0,
                     scheduledShiftStart: att.scheduledShiftStart || '09:30',
                     lateGraceMinutes: att.lateGraceMinutes || 15,
+                    notes: att.notes || '',
                     correction: att.correction,
                     breaks: att.breaks || [],
                     sessions: att.sessions || [],
@@ -601,6 +686,7 @@ router.get('/attendance', async (req, res) => {
                 lateMinutes: 0,
                 scheduledShiftStart: '09:30',
                 lateGraceMinutes: 15,
+                notes: '',
                 correction: null,
                 breaks: [],
                 sessions: [],
@@ -642,10 +728,20 @@ router.get('/attendance', async (req, res) => {
 router.patch('/attendance', async (req, res) => {
     try {
         await connectToDatabase();
-        const { attendanceId, employeeId, date, status, checkIn, checkOut, isLate, lateMinutes, reason } = req.body;
+        const { attendanceId, employeeId, date, status, checkIn, checkOut, isLate, lateMinutes, reason, notes } = req.body;
         if (!attendanceId && (!employeeId || !date)) {
             return res.status(400).json({ success: false, error: 'Attendance ID or employeeId + date is required' });
         }
+
+        const effectiveReason = String(reason ?? notes ?? '').trim();
+        if (status === 'ABSENT' && !effectiveReason) {
+            return res.status(400).json({
+                success: false,
+                error: 'Absent reason is required when marking an employee as Absent.',
+            });
+        }
+
+        const actorLabel = req.user?.name || req.user?.employeeId || 'Admin';
 
         let record = attendanceId ? await Attendance.findById(attendanceId) : null;
         if (!record && employeeId && date) {
@@ -670,6 +766,9 @@ router.patch('/attendance', async (req, res) => {
                 checkOut,
                 isLate,
                 lateMinutes,
+                notes: effectiveReason,
+                reason: effectiveReason,
+                markedBy: actorLabel,
                 shiftCfg,
             });
             record = await Attendance.create({
@@ -686,6 +785,9 @@ router.patch('/attendance', async (req, res) => {
                 checkOut,
                 isLate,
                 lateMinutes,
+                notes: reason !== undefined || notes !== undefined ? effectiveReason : undefined,
+                reason: effectiveReason,
+                markedBy: actorLabel,
                 shiftCfg,
             });
             record.status = patch.status;
@@ -696,6 +798,8 @@ router.patch('/attendance', async (req, res) => {
             record.scheduledShiftStart = patch.scheduledShiftStart;
             record.lateGraceMinutes = patch.lateGraceMinutes;
             record.totalWorkingMinutes = patch.totalWorkingMinutes;
+            record.notes = patch.notes;
+            record.markedBy = patch.markedBy;
             await record.save();
         }
 
@@ -709,14 +813,21 @@ router.patch('/attendance', async (req, res) => {
             metadata: {
                 employeeId: record.employeeId,
                 date: record.date,
-                reason,
+                reason: effectiveReason,
                 status: record.status,
                 checkIn: record.checkIn,
                 checkOut: record.checkOut,
                 isLate: record.isLate,
                 lateMinutes: record.lateMinutes,
+                notes: record.notes,
             },
             ipAddress: req.ip,
+        });
+
+        await invalidateReportsForEmployee({
+            employeeId: record.employeeId,
+            startDate: record.date,
+            endDate: record.date,
         });
 
         try {
@@ -725,6 +836,7 @@ router.patch('/attendance', async (req, res) => {
             if (checkIn !== undefined) changesSummary.push('Check-In');
             if (checkOut !== undefined) changesSummary.push('Check-Out');
             if (isLate !== undefined || lateMinutes !== undefined) changesSummary.push('Late Status/Minutes');
+            if (effectiveReason) changesSummary.push('Reason/Notes');
 
             const stakeholders = await resolveStakeholders({
                 employeeId: record.employeeId,
@@ -736,7 +848,7 @@ router.patch('/attendance', async (req, res) => {
                     employeeEmail: stakeholders.employee?.email,
                     employeeName: stakeholders.employee?.name || record.employeeId,
                     actorName: req.user?.name || 'Admin',
-                    reason: reason || '',
+                    reason: effectiveReason,
                     changesSummary,
                     managerEmails: stakeholders.managementEmails,
                     clientUrl: getRequestClientUrl(req),
@@ -790,6 +902,12 @@ router.patch('/attendance/correction/:id', async (req, res) => {
             }
         }
         await record.save();
+
+        await invalidateReportsForEmployee({
+            employeeId: record.employeeId,
+            startDate: record.date,
+            endDate: record.date,
+        });
 
         await logAuditEvent({
             actorId: req.user.userId,

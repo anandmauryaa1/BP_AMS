@@ -88,6 +88,8 @@ export const DeepAnalysisView: React.FC<DeepAnalysisViewProps> = ({
       reportType: 'analysis',
       employeeId,
     });
+    if (startDate) queryParams.set('startDate', startDate);
+    if (endDate) queryParams.set('endDate', endDate);
     window.open(`/api/analytics/export?${queryParams.toString()}`, '_blank');
   };
 
@@ -181,35 +183,168 @@ export const DeepAnalysisView: React.FC<DeepAnalysisViewProps> = ({
         <div className="space-y-6">
           {/* Section 1: Attendance Analysis */}
           <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-              <Clock className="w-4 h-4 text-rose-600" />
-              1. Attendance Analysis & Consistency
-            </h3>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                <Clock className="w-4 h-4 text-rose-600" />
+                1. Attendance, Punctuality &amp; Leave Analysis
+              </h3>
+              <div className="flex flex-wrap items-center gap-2">
+                {Array.isArray(analysis.attendance.records) && analysis.attendance.records.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openDrillDown(
+                        'Attendance Log Records',
+                        analysis.attendance.records.map((r: any, i: number) => ({
+                          id: `rec-${r.date}-${i}`,
+                          title: `${r.date} — ${r.status}${r.isLate ? ` (Late +${r.lateMinutes}m)` : ''}`,
+                          subtitle: r.notes
+                            ? `Notes: ${r.notes}`
+                            : `Worked: ${formatMinutes(r.workingMinutes || 0)} | Break: ${r.breakMinutes || 0}m`,
+                          badgeText: r.status,
+                          badgeVariant:
+                            r.status === 'ABSENT' || r.status === 'MISSED_CHECKOUT'
+                              ? 'danger'
+                              : r.isLate
+                              ? 'warning'
+                              : 'success',
+                          meta: {
+                            Worked: formatMinutes(r.workingMinutes || 0),
+                            Break: `${r.breakMinutes || 0}m`,
+                            Late: r.isLate ? `${r.lateMinutes || 0}m` : 'On Time',
+                          },
+                        }))
+                      )
+                    }
+                    className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
+                  >
+                    View Attendance Logs ({analysis.attendance.records.length})
+                  </button>
+                )}
+              </div>
+            </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50">
                 <span className="text-xs text-slate-500">Attendance Consistency</span>
                 <div className="text-xl font-bold text-slate-900 dark:text-white mt-1">
                   {analysis.attendance.attendanceConsistency}%
                 </div>
-              </div>
-              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50">
-                <span className="text-xs text-slate-500">Present / Leave Days</span>
-                <div className="text-xl font-bold text-slate-900 dark:text-white mt-1">
-                  {analysis.attendance.presentDays} / {analysis.attendance.leaveDays}
+                <div className="text-[11px] text-slate-500 mt-0.5">
+                  Across {analysis.attendance.workingDaysInRange || 0} working days
                 </div>
               </div>
-              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50">
-                <span className="text-xs text-slate-500">Late Arrivals / Missed</span>
+
+              <div
+                onClick={() => {
+                  const absList = analysis.attendance.absentRecordsList || [];
+                  if (absList.length === 0) return;
+                  openDrillDown(
+                    'Marked Absent Records',
+                    absList.map((a: any, i: number) => ({
+                      id: `abs-${i}`,
+                      title: `${a.date} — Absent`,
+                      subtitle: a.reason ? `Reason: ${a.reason}` : 'No reason logged',
+                      badgeText: 'ABSENT',
+                      badgeVariant: 'danger',
+                    }))
+                  );
+                }}
+                className={`p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 ${
+                  (analysis.attendance.absentRecordsList?.length || 0) > 0
+                    ? 'cursor-pointer hover:ring-1 hover:ring-rose-400'
+                    : ''
+                }`}
+              >
+                <span className="text-xs text-slate-500">Present / Absent</span>
+                <div className="text-xl font-bold text-slate-900 dark:text-white mt-1">
+                  {analysis.attendance.presentDays} /{' '}
+                  <span className={(analysis.attendance.absentDays || 0) > 0 ? 'text-rose-600 dark:text-rose-400' : ''}>
+                    {analysis.attendance.absentDays || 0}
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-500 mt-0.5">
+                  {(analysis.attendance.absentRecordsList?.length || 0) > 0
+                    ? 'Click to view absent reasons'
+                    : 'Days worked vs absent'}
+                </div>
+              </div>
+
+              <div
+                onClick={() =>
+                  openDrillDown(
+                    'Leave Breakdown in Period',
+                    (analysis.attendance.leaveDetails || []).length > 0
+                      ? analysis.attendance.leaveDetails.map((lv: any, i: number) => ({
+                          id: `lv-${lv._id || i}`,
+                          title: `${lv.leaveType} (${lv.days}d) — ${lv.startDate} to ${lv.endDate}`,
+                          subtitle: lv.reason || 'No reason provided',
+                          badgeText: `${lv.status} • ${lv.isPaid ? 'Paid' : 'LWP'}`,
+                          badgeVariant:
+                            lv.status === 'APPROVED' ? (lv.isPaid ? 'success' : 'warning') : 'info',
+                        }))
+                      : [
+                          {
+                            id: 'lv-none',
+                            title: 'No Leave Requests in Selected Period',
+                            subtitle: 'Approved Paid, Unpaid (LWP), and Pending leaves appear here.',
+                            badgeText: '0 days',
+                            badgeVariant: 'default',
+                          },
+                        ]
+                  )
+                }
+                className="p-4 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/20 border border-indigo-200/60 dark:border-indigo-900/40 cursor-pointer hover:border-indigo-400 transition"
+              >
+                <span className="text-xs text-indigo-700 dark:text-indigo-300 font-medium">Approved Leaves</span>
+                <div className="text-xl font-bold text-slate-900 dark:text-white mt-1">
+                  {analysis.attendance.leaveDays}d
+                </div>
+                <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
+                  Paid: {analysis.attendance.approvedPaidLeaveDays || 0}d • LWP:{' '}
+                  {analysis.attendance.unpaidLeaveDays || 0}d
+                  {(analysis.attendance.pendingLeaveDays || 0) > 0
+                    ? ` • Pending: ${analysis.attendance.pendingLeaveDays}d`
+                    : ''}
+                </div>
+              </div>
+
+              <div
+                onClick={() => {
+                  const lateItems = (analysis.attendance.lateRecordsList || []).map((lr: any, i: number) => ({
+                    id: `late-${i}`,
+                    title: `${lr.date} — Late (+${lr.lateMinutes}m)`,
+                    subtitle: `Scheduled ${lr.scheduledShiftStart} • Status: ${lr.status}`,
+                    badgeText: `+${lr.lateMinutes}m`,
+                    badgeVariant: 'warning' as const,
+                  }));
+                  const missedItems = (analysis.attendance.missedCheckoutList || []).map((mc: any, i: number) => ({
+                    id: `mc-${i}`,
+                    title: `${mc.date} — Missed Checkout`,
+                    subtitle: `Status: ${mc.status}`,
+                    badgeText: 'MISSED',
+                    badgeVariant: 'danger' as const,
+                  }));
+                  const combined = [...lateItems, ...missedItems];
+                  if (combined.length > 0) openDrillDown('Late Arrivals & Missed Checkouts', combined);
+                }}
+                className="p-4 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40 cursor-pointer hover:border-amber-400 transition"
+              >
+                <span className="text-xs text-amber-700 dark:text-amber-300 font-medium">Late / Missed Out</span>
                 <div className="text-xl font-bold text-slate-900 dark:text-white mt-1">
                   {analysis.attendance.lateArrivals} / {analysis.attendance.missedCheckouts}
                 </div>
+                <div className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
+                  {analysis.attendance.totalLateMinutes || 0} late mins total
+                </div>
               </div>
+
               <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50">
-                <span className="text-xs text-slate-500">Avg Working / Break Time</span>
+                <span className="text-xs text-slate-500">Avg Working / Break</span>
                 <div className="text-xl font-bold text-slate-900 dark:text-white mt-1">
                   {formatHours(analysis.attendance.avgWorkingMinutes)} / {analysis.attendance.avgBreakMinutes}m
                 </div>
+                <div className="text-[11px] text-slate-500 mt-0.5">Per present day</div>
               </div>
             </div>
           </div>

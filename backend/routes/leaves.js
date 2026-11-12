@@ -16,6 +16,7 @@ import {
 import { resolveStakeholders } from '../services/stakeholders.js';
 import { logAuditEvent } from '../services/audit.js';
 import { calculateEmployeeLeaveBalances } from '../services/leave-accrual-engine.js';
+import { invalidateReportsForEmployee } from '../services/report-generator.js';
 
 const router = Router();
 router.use(authenticateToken);
@@ -295,6 +296,12 @@ router.post('/', async (req, res) => {
             }
         }
 
+        await invalidateReportsForEmployee({
+            employeeId: targetEmployeeId,
+            startDate: leave.startDate,
+            endDate: leave.endDate,
+        });
+
         return res.status(201).json({
             success: true,
             message: isCreatedForEmployee
@@ -491,6 +498,12 @@ const handleUpdateLeave = async (req, res) => {
             console.warn('[EmailNotification:LeaveUpdate] Non-fatal email error:', emailErr);
         }
 
+        await invalidateReportsForEmployee({
+            employeeId: updated.employeeId,
+            startDate: beforeSnapshot.startDate && beforeSnapshot.startDate < updated.startDate ? beforeSnapshot.startDate : updated.startDate,
+            endDate: beforeSnapshot.endDate && beforeSnapshot.endDate > updated.endDate ? beforeSnapshot.endDate : updated.endDate,
+        });
+
         return res.json({
             success: true,
             message: isPureDecision
@@ -588,6 +601,12 @@ const handleDeleteLeave = async (req, res) => {
             console.warn('[EmailNotification:LeaveDelete] Non-fatal email error:', emailErr);
         }
 
+        await invalidateReportsForEmployee({
+            employeeId: existing.employeeId,
+            startDate: existing.startDate,
+            endDate: existing.endDate,
+        });
+
         return res.json({
             success: true,
             message: 'Leave removed with reason logged and employee notified via email.',
@@ -666,6 +685,12 @@ const handleSelfCancelLeave = async (req, res) => {
         } catch (emailErr) {
             console.warn('[EmailNotification:LeaveCancel] Non-fatal email error:', emailErr);
         }
+
+        await invalidateReportsForEmployee({
+            employeeId: existing.employeeId,
+            startDate: existing.startDate,
+            endDate: existing.endDate,
+        });
 
         return res.json({
             success: true,

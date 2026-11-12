@@ -19,6 +19,16 @@ const EmployeeDailyReportSchema = new Schema({
         lateMinutes: { type: Number, default: 0 },
         earlyCheckoutMinutes: { type: Number, default: 0 },
         missedCheckout: { type: Boolean, default: false },
+        notes: { type: String },
+        leave: {
+            onLeave: { type: Boolean, default: false },
+            status: { type: String },
+            leaveType: { type: String },
+            isPaid: { type: Boolean, default: true },
+            startDate: { type: String },
+            endDate: { type: String },
+            reason: { type: String },
+        },
     },
     work: {
         projectsWorked: { type: Number, default: 0 },

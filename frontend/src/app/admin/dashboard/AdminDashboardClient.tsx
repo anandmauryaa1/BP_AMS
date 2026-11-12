@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { cachedFetch } from '@/lib/client-cache';
 import { Navbar } from '@/components/Navbar';
 import { AdminNav } from '@/components/AdminNav';
+import { AllInOneCalendarWidget } from '@/components/calendar/AllInOneCalendarWidget';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -264,6 +265,9 @@ export default function AdminDashboardClient({
             ))}
           </div>
         </div>
+
+        {/* 2.5 All-In-One Calendar Widget */}
+        <AllInOneCalendarWidget mode="admin" />
 
         {/* 3. Live Attendance Roster */}
         <Card className="border-slate-200 dark:border-slate-800 overflow-hidden">

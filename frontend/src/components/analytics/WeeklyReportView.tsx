@@ -15,6 +15,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { IEmployeeWeeklyReport } from '@/types';
+import { getTodayDateString } from '@/lib/utils';
 import { DrillDownModal, DrillDownItem } from './DrillDownModal';
 
 interface WeeklyReportViewProps {
@@ -28,12 +29,13 @@ export const WeeklyReportView: React.FC<WeeklyReportViewProps> = ({
   isEmployeeSelf = false,
   titleTag = 'h2',
 }) => {
-  // Get current Monday
+  // Get current Monday in studio/local calendar without UTC date shifting
   const getMonday = () => {
     const d = new Date();
     const day = d.getDay();
     const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-    return new Date(d.setDate(diff)).toISOString().split('T')[0];
+    const monday = new Date(d.getFullYear(), d.getMonth(), diff);
+    return getTodayDateString(monday);
   };
 
   const [weekStart, setWeekStart] = useState<string>(getMonday());
@@ -180,30 +182,57 @@ export const WeeklyReportView: React.FC<WeeklyReportViewProps> = ({
           {/* Key Weekly Metric Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div
-              onClick={() =>
-                openDrillDown('Weekly Attendance', [
+              onClick={() => {
+                const items: DrillDownItem[] = [
                   {
                     id: 'att-w-1',
-                    title: `Present: ${report.attendance.presentDays} / ${report.attendance.workingDays} Days`,
-                    subtitle: `Leaves: ${report.attendance.leaveDays} | Absences: ${report.attendance.absentDays}`,
+                    title: `Present: ${report.attendance.presentDays} / ${report.attendance.workingDays} Working Days`,
+                    subtitle: `Paid Leave: ${report.attendance.paidLeaveDays || 0}d | LWP: ${
+                      report.attendance.unpaidLeaveDays || 0
+                    }d | Absences: ${report.attendance.absentDays}`,
                     badgeText: `${formatHours(report.attendance.totalWorkingMinutes)} Total`,
                     badgeVariant: 'info',
                     meta: {
                       'Avg Daily': `${report.attendance.averageDailyWorkingMinutes}m`,
-                      Late: report.attendance.lateCount,
+                      'Late Count': `${report.attendance.lateCount} (${report.attendance.totalLateMinutes || 0}m)`,
+                      'Pending Leave': `${report.attendance.pendingLeaveDays || 0}d`,
                       'Missed Checkout': report.attendance.missedCheckoutCount,
                     },
                   },
-                ])
-              }
+                ];
+                if (Array.isArray(report.attendance.leaveDetails)) {
+                  for (const lv of report.attendance.leaveDetails) {
+                    items.push({
+                      id: `wlv-${lv.id || lv.startDate}`,
+                      title: `${lv.leaveType} (${lv.daysInRange}d) — ${lv.startDate} to ${lv.endDate}`,
+                      subtitle: lv.reason || 'No reason provided',
+                      badgeText: `${lv.status} • ${lv.isPaid ? 'Paid' : 'LWP'}`,
+                      badgeVariant: lv.status === 'APPROVED' ? (lv.isPaid ? 'success' : 'warning') : 'info',
+                    });
+                  }
+                }
+                openDrillDown('Weekly Attendance & Leave Breakdown', items);
+              }}
               className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-rose-500/50 cursor-pointer transition-all shadow-sm"
             >
-              <span className="text-xs text-slate-500">Working Time</span>
+              <span className="text-xs text-slate-500">Attendance &amp; Working Time</span>
               <div className="text-2xl font-bold text-slate-900 dark:text-white mt-2">
                 {formatHours(report.attendance.totalWorkingMinutes)}
               </div>
               <p className="text-xs text-slate-500 mt-1">
-                Avg {report.attendance.averageDailyWorkingMinutes}m / day
+                {report.attendance.presentDays}/{report.attendance.workingDays}d Present •{' '}
+                <span className="text-indigo-600 dark:text-indigo-400 font-semibold">
+                  Leave: {report.attendance.leaveDays}d
+                </span>
+                {report.attendance.absentDays > 0 && (
+                  <span className="text-rose-600 dark:text-rose-400 font-semibold">
+                    {' '}• Absent: {report.attendance.absentDays}d
+                  </span>
+                )}
+              </p>
+              <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-0.5">
+                Late: {report.attendance.lateCount} ({report.attendance.totalLateMinutes || 0}m) • Paid:{' '}
+                {report.attendance.paidLeaveDays || 0}d / LWP: {report.attendance.unpaidLeaveDays || 0}d
               </p>
             </div>
 
@@ -304,7 +333,11 @@ export const WeeklyReportView: React.FC<WeeklyReportViewProps> = ({
               {report.dailyTrend.map((d) => {
                 const maxMins = 480; // 8h standard
                 const pct = Math.min(Math.round((d.workingMinutes / maxMins) * 100), 100);
-                const dateLabel = new Date(d.date).toLocaleDateString('en-US', {
+                const [yStr, mStr, dStr] = String(d.date || '').split('-');
+                const localDate = yStr && mStr && dStr
+                  ? new Date(Number(yStr), Number(mStr) - 1, Number(dStr))
+                  : new Date(d.date);
+                const dateLabel = localDate.toLocaleDateString('en-US', {
                   weekday: 'short',
                   day: 'numeric',
                 });

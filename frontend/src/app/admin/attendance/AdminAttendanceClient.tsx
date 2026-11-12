@@ -23,6 +23,7 @@ import {
   Clock,
   Users,
   Timer,
+  UserPlus,
 } from 'lucide-react';
 import { AttendanceStatus, IAttendance } from '@/types';
 
@@ -40,8 +41,12 @@ export default function AdminAttendanceClient({ initialRecords = [] }: Props) {
   const [isLoading, setIsLoading] = useState(initialRecords.length === 0);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
-  // Manual Edit Modal State
+  // Manual Edit / Mark Attendance Modal State
+  const [employeesList, setEmployeesList] = useState<any[]>([]);
   const [editingRecord, setEditingRecord] = useState<any | null>(null);
+  const [isNewMarkModal, setIsNewMarkModal] = useState(false);
+  const [editEmployeeId, setEditEmployeeId] = useState('');
+  const [editDate, setEditDate] = useState(getTodayDateString());
   const [editStatus, setEditStatus] = useState<AttendanceStatus>('PRESENT');
   const [editCheckIn, setEditCheckIn] = useState('');
   const [editCheckOut, setEditCheckOut] = useState('');
@@ -87,19 +92,85 @@ export default function AdminAttendanceClient({ initialRecords = [] }: Props) {
     fetchRecords();
   }, [fetchRecords]);
 
+  useEffect(() => {
+    fetch('/api/admin/employees?status=ACTIVE&limit=200')
+      .then((r) => r.json())
+      .then((d) => {
+        const list = d?.data?.employees;
+        if (d?.success && Array.isArray(list)) {
+          setEmployeesList(list);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const employeeSelectOptions =
+    employeesList.length > 0
+      ? employeesList
+      : records.map((r) => ({
+          _id: r._id,
+          employeeId: r.employeeId,
+          name: r.employeeName,
+          department: r.department,
+        }));
+
   const openManualEdit = (rec: any) => {
+    setIsNewMarkModal(false);
     setEditingRecord(rec);
+    setEditEmployeeId(rec.employeeId || '');
+    setEditDate(rec.date || dateFilter);
     setEditStatus(rec.status === 'NOT_CHECKED_IN' ? 'PRESENT' : rec.status);
     setEditCheckIn(toLocalDateTimeInput(rec.checkIn));
     setEditCheckOut(toLocalDateTimeInput(rec.checkOut));
     setEditIsLate(Boolean(rec.isLate || (rec.lateMinutes && rec.lateMinutes > 0)));
     setEditLateMinutes(String(rec.lateMinutes || 0));
+    setEditReason(rec.notes || '');
+  };
+
+  const openMarkAttendanceModal = () => {
+    const targetDate = dateFilter || getTodayDateString();
+    const firstEmpId = employeeSelectOptions[0]?.employeeId || '';
+    setIsNewMarkModal(true);
+    setEditingRecord({ employeeId: firstEmpId, employeeName: employeeSelectOptions[0]?.name || '', date: targetDate });
+    setEditEmployeeId(firstEmpId);
+    setEditDate(targetDate);
+    setEditStatus('PRESENT');
+    setEditCheckIn(`${targetDate}T09:30`);
+    setEditCheckOut('');
+    setEditIsLate(false);
+    setEditLateMinutes('0');
     setEditReason('');
+  };
+
+  const handleMarkDecisionToggle = (mode: 'PRESENT' | 'ABSENT') => {
+    if (mode === 'ABSENT') {
+      setEditStatus('ABSENT');
+      setEditCheckIn('');
+      setEditCheckOut('');
+      setEditIsLate(false);
+      setEditLateMinutes('0');
+    } else {
+      setEditStatus(editCheckOut ? 'COMPLETED' : 'PRESENT');
+      if (!editCheckIn && editDate) {
+        setEditCheckIn(`${editDate}T09:30`);
+      }
+    }
   };
 
   const handleManualEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingRecord) return;
+    const targetEmpId = isNewMarkModal ? editEmployeeId : editingRecord.employeeId;
+    const targetDate = isNewMarkModal ? editDate : editingRecord.date;
+    if (!targetEmpId || !targetDate) {
+      showToast('Please select an employee and date', 'error');
+      return;
+    }
+    const isAbsent = editStatus === 'ABSENT';
+    if (isAbsent && !editReason.trim()) {
+      showToast('Please enter an Absent Reason before saving', 'error');
+      return;
+    }
     setIsSubmittingEdit(true);
 
     try {
@@ -107,27 +178,34 @@ export default function AdminAttendanceClient({ initialRecords = [] }: Props) {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          attendanceId: editingRecord._id,
-          employeeId: editingRecord.employeeId,
-          date: editingRecord.date,
+          attendanceId: isNewMarkModal ? undefined : editingRecord._id,
+          employeeId: targetEmpId,
+          date: targetDate,
           status: editStatus,
-          checkIn: editCheckIn ? new Date(editCheckIn).toISOString() : null,
-          checkOut: editCheckOut ? new Date(editCheckOut).toISOString() : null,
-          isLate: editIsLate,
-          lateMinutes: editIsLate ? Math.max(0, Number(editLateMinutes) || 0) : 0,
-          reason: editReason,
+          checkIn: isAbsent ? null : editCheckIn ? new Date(editCheckIn).toISOString() : null,
+          checkOut: isAbsent ? null : editCheckOut ? new Date(editCheckOut).toISOString() : null,
+          isLate: isAbsent ? false : editIsLate,
+          lateMinutes: isAbsent ? 0 : editIsLate ? Math.max(0, Number(editLateMinutes) || 0) : 0,
+          reason: editReason.trim(),
+          notes: editReason.trim(),
         }),
       });
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        showToast(data.message || 'Failed to update attendance', 'error');
+        showToast(data.error || data.message || 'Failed to update attendance', 'error');
         setIsSubmittingEdit(false);
         return;
       }
 
-      showToast('Attendance record corrected and audited successfully', 'success');
+      showToast(
+        isAbsent
+          ? `Marked ${targetEmpId} as Absent (${targetDate})`
+          : 'Attendance record saved and audited successfully',
+        'success'
+      );
       setEditingRecord(null);
+      setIsNewMarkModal(false);
       fetchRecords();
     } catch {
       showToast('Network error saving correction', 'error');
@@ -220,13 +298,19 @@ export default function AdminAttendanceClient({ initialRecords = [] }: Props) {
               Review real-time shifts, track late check-in records, process corrections, and manage attendance audits.
             </p>
           </div>
-          <Link
-            href="/admin/operations-calendar?layer=ATTENDANCE"
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-rose-500/40 hover:text-rose-600 dark:hover:text-rose-400 shadow-sm transition self-start sm:self-auto"
-          >
-            <Calendar className="w-3.5 h-3.5" />
-            Common Calendar
-          </Link>
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+            <Button size="sm" onClick={openMarkAttendanceModal} className="gap-1.5 text-xs">
+              <UserPlus className="w-3.5 h-3.5" />
+              Mark Attendance
+            </Button>
+            <Link
+              href="/admin/operations-calendar?layer=ATTENDANCE"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-rose-500/40 hover:text-rose-600 dark:hover:text-rose-400 shadow-sm transition"
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              All-In-One Calendar
+            </Link>
+          </div>
         </div>
 
         {/* Attendance & Punctuality KPI Quick Stats */}
@@ -477,6 +561,12 @@ export default function AdminAttendanceClient({ initialRecords = [] }: Props) {
                       </td>
                       <td className="py-3 px-4">
                         <Badge status={rec.status} />
+                        {rec.notes && (
+                          <div className="text-[11px] text-slate-600 dark:text-slate-300 mt-1 max-w-[200px] truncate" title={rec.notes}>
+                            {rec.status === 'ABSENT' ? 'Reason: ' : 'Note: '}
+                            <span className="font-medium">{rec.notes}</span>
+                          </div>
+                        )}
                         {rec.sessions && rec.sessions.length > 1 && (
                           <div className="text-[10px] font-mono text-purple-600 dark:text-purple-400 font-semibold mt-1">
                             {rec.sessions.length} Shift Sessions
@@ -554,22 +644,109 @@ export default function AdminAttendanceClient({ initialRecords = [] }: Props) {
           </div>
         </Card>
 
-        {/* Modal: Manual Admin Edit */}
+        {/* Modal: Manual Admin Edit / Mark Other Employee Attendance */}
         <Modal
           isOpen={!!editingRecord}
-          onClose={() => setEditingRecord(null)}
-          title={`Manual Attendance Correction (${editingRecord?.employeeId} - ${editingRecord?.date})`}
-          description="Directly override attendance record. An immutable audit log will be created."
+          onClose={() => {
+            setEditingRecord(null);
+            setIsNewMarkModal(false);
+          }}
+          title={
+            isNewMarkModal
+              ? 'Mark Employee Attendance (Present / Absent)'
+              : `Update Attendance (${editingRecord?.employeeId} - ${editingRecord?.date})`
+          }
+          description="Mark any employee Present or Absent (with mandatory reason), or adjust shift timestamps with audit logging."
         >
           {editingRecord && (
             <form onSubmit={handleManualEditSubmit} className="space-y-4">
+              {isNewMarkModal && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1">
+                      Employee *
+                    </label>
+                    <select
+                      required
+                      value={editEmployeeId}
+                      onChange={(e) => setEditEmployeeId(e.target.value)}
+                      className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 font-semibold"
+                    >
+                      <option value="">-- Select Employee --</option>
+                      {employeeSelectOptions.map((emp: any) => (
+                        <option key={emp._id || emp.employeeId} value={emp.employeeId}>
+                          {emp.name} ({emp.employeeId})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1">
+                      Date *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={editDate}
+                      onChange={(e) => {
+                        const d = e.target.value;
+                        setEditDate(d);
+                        if (d && editStatus !== 'ABSENT') {
+                          setEditCheckIn(`${d}T09:30`);
+                        }
+                      }}
+                      className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Quick Decision Buttons: Present vs Absent */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1.5">
+                  Attendance Decision
+                </label>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => handleMarkDecisionToggle('PRESENT')}
+                    className={`px-3 py-2 rounded-xl border text-xs font-bold transition ${
+                      editStatus !== 'ABSENT'
+                        ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500/40'
+                        : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'
+                    }`}
+                  >
+                    Present
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleMarkDecisionToggle('ABSENT')}
+                    className={`px-3 py-2 rounded-xl border text-xs font-bold transition ${
+                      editStatus === 'ABSENT'
+                        ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-500 text-rose-700 dark:text-rose-300 ring-1 ring-rose-500/40'
+                        : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300'
+                    }`}
+                  >
+                    Absent (Reason Required)
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1">
-                  Status
+                  Detailed Status
                 </label>
                 <select
                   value={editStatus}
-                  onChange={(e) => setEditStatus(e.target.value as AttendanceStatus)}
+                  onChange={(e) => {
+                    const next = e.target.value as AttendanceStatus;
+                    if (next === 'ABSENT') {
+                      handleMarkDecisionToggle('ABSENT');
+                    } else {
+                      setEditStatus(next);
+                      if (!editCheckIn && editDate) setEditCheckIn(`${editDate}T09:30`);
+                    }
+                  }}
                   className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 font-semibold"
                 >
                   <option value="PRESENT">PRESENT</option>
@@ -580,81 +757,101 @@ export default function AdminAttendanceClient({ initialRecords = [] }: Props) {
                 </select>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1">
-                  Check-In Timestamp
-                </label>
-                <input
-                  type="datetime-local"
-                  value={editCheckIn}
-                  onChange={(e) => setEditCheckIn(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1">
-                  Check-Out Timestamp
-                </label>
-                <input
-                  type="datetime-local"
-                  value={editCheckOut}
-                  onChange={(e) => setEditCheckOut(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-900/50">
-                <label className="flex items-center gap-2.5 text-xs font-semibold text-slate-800 dark:text-slate-200 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={editIsLate}
-                    onChange={(e) => {
-                      const checked = e.target.checked;
-                      setEditIsLate(checked);
-                      if (!checked) setEditLateMinutes('0');
-                      else if (Number(editLateMinutes) <= 0) setEditLateMinutes('15');
-                    }}
-                    className="w-4 h-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
-                  />
-                  Mark as Late Check-In
-                </label>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-1">
-                    Late Minutes
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={720}
-                    disabled={!editIsLate}
-                    value={editIsLate ? editLateMinutes : '0'}
-                    onChange={(e) => setEditLateMinutes(e.target.value)}
-                    className="w-full px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 disabled:opacity-50"
-                  />
+              {editStatus === 'ABSENT' ? (
+                <div className="p-3 rounded-xl bg-rose-50/70 dark:bg-rose-950/25 border border-rose-200 dark:border-rose-900/50 text-xs text-rose-800 dark:text-rose-200">
+                  Marking as <span className="font-bold">ABSENT</span> clears check-in, check-out, and late minutes for {editDate}. Enter the reason below.
                 </div>
-              </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1">
+                      Check-In Timestamp
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={editCheckIn}
+                      onChange={(e) => setEditCheckIn(e.target.value)}
+                      className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1">
+                      Check-Out Timestamp
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={editCheckOut}
+                      onChange={(e) => setEditCheckOut(e.target.value)}
+                      className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-900/50">
+                    <label className="flex items-center gap-2.5 text-xs font-semibold text-slate-800 dark:text-slate-200 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={editIsLate}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setEditIsLate(checked);
+                          if (!checked) setEditLateMinutes('0');
+                          else if (Number(editLateMinutes) <= 0) setEditLateMinutes('15');
+                        }}
+                        className="w-4 h-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                      />
+                      Mark as Late Check-In
+                    </label>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-1">
+                        Late Minutes
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={720}
+                        disabled={!editIsLate}
+                        value={editIsLate ? editLateMinutes : '0'}
+                        onChange={(e) => setEditLateMinutes(e.target.value)}
+                        className="w-full px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 disabled:opacity-50"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wide mb-1">
-                  Reason for Admin Adjustment *
+                  {editStatus === 'ABSENT' ? 'Absent Reason *' : 'Reason for Admin Adjustment *'}
                 </label>
                 <textarea
                   required
                   rows={2}
                   value={editReason}
                   onChange={(e) => setEditReason(e.target.value)}
-                  placeholder="e.g. Employee forgot to checkout after late studio shoot"
+                  placeholder={
+                    editStatus === 'ABSENT'
+                      ? 'e.g. Unplanned personal absence / Sick day without notice'
+                      : 'e.g. Employee forgot to checkout after late studio shoot'
+                  }
                   className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500"
                 />
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                <Button type="button" variant="outline" size="sm" onClick={() => setEditingRecord(null)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setEditingRecord(null);
+                    setIsNewMarkModal(false);
+                  }}
+                >
                   Cancel
                 </Button>
                 <Button type="submit" size="sm" isLoading={isSubmittingEdit}>
-                  Save Correction
+                  {editStatus === 'ABSENT' ? 'Confirm Absent' : 'Save Attendance'}
                 </Button>
               </div>
             </form>

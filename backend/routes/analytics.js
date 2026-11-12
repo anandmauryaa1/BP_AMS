@@ -14,6 +14,7 @@ import { SalaryLoan } from '../models/SalaryLoan.js';
 import { TaxDeclaration } from '../models/TaxDeclaration.js';
 import { calculateMonthlyTds } from '../services/tds-tax-engine.js';
 import { getMonthDateBounds, summarizeLeavesInRange } from '../services/leave-utils.js';
+import { getTodayDateString } from '../utils/index.js';
 
 const router = Router();
 router.use(authenticateToken);
@@ -159,7 +160,10 @@ const handleEmployeePerformanceSalary = async (req, res) => {
         ].filter(Boolean);
 
         const taskQuery = {
-            $or: [{ assigneeId: empMongoId }, { assigneeId: empCode }, { employeeId: empCode }],
+            $or: [
+                ...(empMongoId ? [{ assignedTo: empMongoId }, { assigneeId: empMongoId }] : []),
+                ...(empCode ? [{ assigneeId: empCode }, { employeeId: empCode }] : []),
+            ],
         };
 
         // Parallel execution of all collection lookups
@@ -205,15 +209,16 @@ const handleEmployeePerformanceSalary = async (req, res) => {
 
         // 1. Task Performance Evaluation
         const monthTasks = tasks.filter(t => {
-            const taskDate = t.createdAt ? new Date(t.createdAt).toISOString().split('T')[0] : '';
-            return taskDate.startsWith(monthPrefix) || t.status === 'IN_PROGRESS';
+            const taskCreated = t.createdAt ? new Date(t.createdAt).toISOString().split('T')[0] : '';
+            const taskDue = t.dueDate ? new Date(t.dueDate).toISOString().split('T')[0] : '';
+            return taskCreated.startsWith(monthPrefix) || taskDue.startsWith(monthPrefix) || ['IN_PROGRESS', 'IN_REVIEW', 'CHANGES_REQUESTED'].includes(t.status);
         });
 
         const assignedTasksCount = monthTasks.length;
-        const completedTasksCount = monthTasks.filter(t => t.status === 'COMPLETED' || t.status === 'DONE').length;
-        const inProgressTasksCount = monthTasks.filter(t => t.status === 'IN_PROGRESS' || t.status === 'ASSIGNED').length;
+        const completedTasksCount = monthTasks.filter(t => ['COMPLETED', 'APPROVED', 'DONE'].includes(t.status)).length;
+        const inProgressTasksCount = monthTasks.filter(t => ['IN_PROGRESS', 'ASSIGNED', 'IN_REVIEW', 'CHANGES_REQUESTED', 'PENDING'].includes(t.status)).length;
         const overdueTasksCount = monthTasks.filter(t => {
-            if (t.status === 'COMPLETED' || t.status === 'DONE') return false;
+            if (['COMPLETED', 'APPROVED', 'DONE', 'CANCELLED'].includes(t.status)) return false;
             if (!t.dueDate) return false;
             return new Date(t.dueDate) < new Date();
         }).length;
@@ -224,14 +229,23 @@ const handleEmployeePerformanceSalary = async (req, res) => {
 
         // 2. Attendance & Leaves Analysis for target month
         let loggedPresentDays = 0;
+        let absentDays = 0;
+        let lateDays = 0;
+        let totalLateMinutes = 0;
         for (const att of attendanceRecords) {
             if (['PRESENT', 'COMPLETED', 'ON_BREAK'].includes(att.status)) {
                 loggedPresentDays++;
+                if (att.isLate || (att.lateMinutes && att.lateMinutes > 0)) {
+                    lateDays++;
+                    totalLateMinutes += Number(att.lateMinutes || 0);
+                }
+            } else if (att.status === 'ABSENT') {
+                absentDays++;
             }
         }
         const actualPresentDays = attendanceRecords.length > 0 ? loggedPresentDays : totalDaysInMonth;
 
-        const { approvedPaidLeaveDays: approvedPaidLeaves, unpaidLeaveDays } = summarizeLeavesInRange(
+        const { approvedPaidLeaveDays: approvedPaidLeaves, unpaidLeaveDays, approvedLeaveDays: totalLeaveDays } = summarizeLeavesInRange(
             leaveRequests,
             monthStartStr,
             monthEndStr
@@ -328,7 +342,11 @@ const handleEmployeePerformanceSalary = async (req, res) => {
                 attendance: {
                     totalDaysInMonth,
                     presentDays: actualPresentDays,
+                    absentDays,
+                    lateDays,
+                    totalLateMinutes,
                     approvedPaidLeaves,
+                    leaveDays: totalLeaveDays,
                     lwpDays,
                     effectivePaidDays,
                 },
@@ -367,27 +385,166 @@ const handleEmployeePerformanceSalary = async (req, res) => {
 
 router.get('/employee-performance-salary', handleEmployeePerformanceSalary);
 
+const csvCell = (val) => `"${String(val ?? '').replace(/"/g, '""')}"`;
+
 router.get('/export', async (req, res) => {
     try {
         const employeeId = req.query.employeeId || req.user?.employeeId || req.user?.userId;
         if (!employeeId) {
             return res.status(400).json({ success: false, error: 'Employee ID is required' });
         }
+        const reportType = String(req.query.reportType || 'analysis').toLowerCase();
+        const todayStr = getTodayDateString();
+        res.setHeader('Content-Type', 'text/csv');
+
+        if (reportType === 'daily') {
+            const report = await generateDailyReport({ employeeId, date: req.query.date });
+            res.setHeader('Content-Disposition', `attachment; filename="daily_report_${employeeId}_${report.date || todayStr}.csv"`);
+            const att = report.attendance || {};
+            const lines = [
+                'SECTION,METRIC,VALUE',
+                `Employee,Name,${csvCell(report.employeeName)}`,
+                `Employee,Employee Code,${csvCell(report.employeeId)}`,
+                `Employee,Date,${csvCell(report.date)}`,
+                `Attendance,Status,${csvCell(att.status)}`,
+                `Attendance,Notes / Reason,${csvCell(att.notes || att.leave?.reason || '')}`,
+                `Attendance,On Leave,${csvCell(att.leave?.onLeave ? 'Yes' : 'No')}`,
+                `Attendance,Leave Type,${csvCell(att.leave?.leaveType || '')}`,
+                `Attendance,Leave Paid,${csvCell(att.leave?.onLeave ? (att.leave?.isPaid ? 'Paid' : 'Unpaid (LWP)') : '')}`,
+                `Attendance,Check In,${csvCell(att.checkIn ? new Date(att.checkIn).toISOString() : '')}`,
+                `Attendance,Check Out,${csvCell(att.checkOut ? new Date(att.checkOut).toISOString() : '')}`,
+                `Attendance,Is Late,${csvCell(att.isLate ? 'Yes' : 'No')}`,
+                `Attendance,Late Minutes,${csvCell(att.lateMinutes || 0)}`,
+                `Attendance,Working Minutes,${csvCell(att.workingMinutes || 0)}`,
+                `Attendance,Break Minutes,${csvCell(att.breakMinutes || 0)}`,
+                `Tasks,Assigned,${csvCell(report.tasks?.assigned || 0)}`,
+                `Tasks,Completed,${csvCell(report.tasks?.completed || 0)}`,
+                `Tasks,In Progress,${csvCell(report.tasks?.inProgress || 0)}`,
+                `Tasks,Overdue,${csvCell(report.tasks?.overdue || 0)}`,
+                `Output,Deliverables Completed,${csvCell(report.output?.deliverablesCompleted || 0)}`,
+                `Output,Daily Target,${csvCell(report.output?.dailyTarget || 0)}`,
+                `Output,Target Achievement,${csvCell(`${report.output?.targetAchievementPct || 0}%`)}`,
+            ];
+            return res.send(lines.join('\n'));
+        }
+
+        if (reportType === 'weekly') {
+            const report = await generateWeeklyReport({ employeeId, weekStart: req.query.weekStart });
+            res.setHeader('Content-Disposition', `attachment; filename="weekly_report_${employeeId}_${report.weekStart || todayStr}.csv"`);
+            const att = report.attendance || {};
+            const prod = report.productivity || {};
+            const lines = [
+                'SECTION,METRIC,VALUE',
+                `Employee,Name,${csvCell(report.employeeName)}`,
+                `Employee,Employee Code,${csvCell(report.employeeId)}`,
+                `Period,Week Range,${csvCell(`${report.weekStart} to ${report.weekEnd}`)}`,
+                `Attendance,Working Days,${csvCell(att.workingDays || 0)}`,
+                `Attendance,Present Days,${csvCell(att.presentDays || 0)}`,
+                `Attendance,Absent Days,${csvCell(att.absentDays || 0)}`,
+                `Attendance,Approved Paid Leave Days,${csvCell(att.paidLeaveDays || 0)}`,
+                `Attendance,Unpaid Leave (LWP) Days,${csvCell(att.unpaidLeaveDays || 0)}`,
+                `Attendance,Pending Leave Days,${csvCell(att.pendingLeaveDays || 0)}`,
+                `Attendance,Total Approved Leaves,${csvCell(att.leaveDays || 0)}`,
+                `Attendance,Late Arrivals,${csvCell(att.lateCount || 0)}`,
+                `Attendance,Total Late Minutes,${csvCell(att.totalLateMinutes || 0)}`,
+                `Attendance,Consistency,${csvCell(`${att.consistencyPct || 0}%`)}`,
+                `Attendance,Total Working Hours,${csvCell(Math.round(((att.totalWorkingMinutes || 0) / 60) * 10) / 10)}`,
+                `Productivity,Tasks Assigned,${csvCell(prod.tasksAssigned || 0)}`,
+                `Productivity,Tasks Completed,${csvCell(prod.tasksCompleted || 0)}`,
+                `Productivity,Task Completion Rate,${csvCell(`${prod.completionRate || 0}%`)}`,
+                `Productivity,Deliverables Produced,${csvCell(prod.deliverablesCompleted || 0)}`,
+                `Productivity,First-Pass Review Approval,${csvCell(`${report.review?.firstPassApprovalRate || 0}%`)}`,
+            ];
+            if (Array.isArray(att.leaveDetails) && att.leaveDetails.length > 0) {
+                lines.push('');
+                lines.push('LEAVE RECORD,TYPE,STATUS,PAID,START,END,DAYS,REASON');
+                for (const lv of att.leaveDetails) {
+                    lines.push([
+                        csvCell(lv.id || ''),
+                        csvCell(lv.leaveType),
+                        csvCell(lv.status),
+                        csvCell(lv.isPaid ? 'Paid' : 'Unpaid'),
+                        csvCell(lv.startDate),
+                        csvCell(lv.endDate),
+                        csvCell(lv.daysInRange),
+                        csvCell(lv.reason || ''),
+                    ].join(','));
+                }
+            }
+            return res.send(lines.join('\n'));
+        }
+
+        if (reportType === 'monthly') {
+            const report = await generateMonthlyReport({
+                employeeId,
+                year: req.query.year ? Number(req.query.year) : undefined,
+                month: req.query.month ? Number(req.query.month) : undefined,
+            });
+            res.setHeader('Content-Disposition', `attachment; filename="monthly_report_${employeeId}_${report.year}-${String(report.month).padStart(2, '0')}.csv"`);
+            const att = report.attendance || {};
+            const prod = report.productivity || {};
+            const lines = [
+                'SECTION,METRIC,VALUE',
+                `Employee,Name,${csvCell(report.employeeName)}`,
+                `Employee,Employee Code,${csvCell(report.employeeId)}`,
+                `Period,Month,${csvCell(`${report.year}-${String(report.month).padStart(2, '0')}`)}`,
+                `Attendance,Working Days,${csvCell(att.workingDays || 0)}`,
+                `Attendance,Present Days,${csvCell(att.presentDays || 0)}`,
+                `Attendance,Absent Days,${csvCell(att.absentDays || 0)}`,
+                `Attendance,Approved Paid Leave Days,${csvCell(att.paidLeaveDays || 0)}`,
+                `Attendance,Unpaid Leave (LWP) Days,${csvCell(att.unpaidLeaveDays || 0)}`,
+                `Attendance,Pending Leave Days,${csvCell(att.pendingLeaveDays || 0)}`,
+                `Attendance,Total Approved Leaves,${csvCell(att.leaveDays || 0)}`,
+                `Attendance,Late Arrivals,${csvCell(att.lateCount || 0)}`,
+                `Attendance,Total Late Minutes,${csvCell(att.totalLateMinutes || 0)}`,
+                `Attendance,Consistency,${csvCell(`${att.consistencyPct || 0}%`)}`,
+                `Attendance,Total Working Hours,${csvCell(Math.round(((att.totalWorkingMinutes || 0) / 60) * 10) / 10)}`,
+                `Productivity,Tasks Assigned,${csvCell(prod.tasksAssigned || 0)}`,
+                `Productivity,Tasks Completed,${csvCell(prod.tasksCompleted || 0)}`,
+                `Productivity,Task Completion Rate,${csvCell(`${prod.completionRate || 0}%`)}`,
+                `Productivity,Deliverables Produced,${csvCell(prod.deliverablesCompleted || 0)}`,
+                `Productivity,On-Time Rate,${csvCell(`${prod.onTimeRate || 0}%`)}`,
+                `Productivity,First-Pass Review Approval,${csvCell(`${report.review?.firstPassApprovalRate || 0}%`)}`,
+            ];
+            if (Array.isArray(att.leaveDetails) && att.leaveDetails.length > 0) {
+                lines.push('');
+                lines.push('LEAVE RECORD,TYPE,STATUS,PAID,START,END,DAYS,REASON');
+                for (const lv of att.leaveDetails) {
+                    lines.push([
+                        csvCell(lv.id || ''),
+                        csvCell(lv.leaveType),
+                        csvCell(lv.status),
+                        csvCell(lv.isPaid ? 'Paid' : 'Unpaid'),
+                        csvCell(lv.startDate),
+                        csvCell(lv.endDate),
+                        csvCell(lv.daysInRange),
+                        csvCell(lv.reason || ''),
+                    ].join(','));
+                }
+            }
+            return res.send(lines.join('\n'));
+        }
+
         const analytics = await computeDeepAnalytics({
             employeeId,
             startDate: req.query.startDate,
             endDate: req.query.endDate,
         });
-        res.setHeader('Content-Type', 'text/csv');
-        res.setHeader('Content-Disposition', `attachment; filename="progress_report_${employeeId}_${new Date().toISOString().split('T')[0]}.csv"`);
+        res.setHeader('Content-Disposition', `attachment; filename="progress_report_${employeeId}_${todayStr}.csv"`);
         let csv = 'METRIC,VALUE\n';
-        csv += `Employee Name,"${analytics.employee.name}"\n`;
-        csv += `Employee Code,"${analytics.employee.employeeId}"\n`;
-        csv += `Department,"${analytics.employee.department}"\n`;
-        csv += `Period,"${analytics.period.start} to ${analytics.period.end}"\n`;
+        csv += `Employee Name,${csvCell(analytics.employee.name)}\n`;
+        csv += `Employee Code,${csvCell(analytics.employee.employeeId)}\n`;
+        csv += `Department,${csvCell(analytics.employee.department)}\n`;
+        csv += `Period,${csvCell(`${analytics.period.start} to ${analytics.period.end}`)}\n`;
         csv += `Attendance Consistency,${analytics.attendance.attendanceConsistency}%\n`;
         csv += `Present Days,${analytics.attendance.presentDays}\n`;
+        csv += `Absent Days,${analytics.attendance.absentDays || 0}\n`;
         csv += `Late Arrivals,${analytics.attendance.lateArrivals}\n`;
+        csv += `Total Late Minutes,${analytics.attendance.totalLateMinutes || 0}\n`;
+        csv += `Paid Leave Days,${analytics.attendance.approvedPaidLeaveDays || 0}\n`;
+        csv += `Unpaid Leave (LWP) Days,${analytics.attendance.unpaidLeaveDays || 0}\n`;
+        csv += `Pending Leave Days,${analytics.attendance.pendingLeaveDays || 0}\n`;
+        csv += `Total Approved Leave Days,${analytics.attendance.leaveDays || 0}\n`;
         csv += `Average Working Hours/Day,${Math.round((analytics.attendance.avgWorkingMinutes / 60) * 10) / 10}\n`;
         csv += `Assigned Tasks,${analytics.workload.assignedTasksCount}\n`;
         csv += `Completed Tasks,${analytics.workload.completedTasksCount}\n`;

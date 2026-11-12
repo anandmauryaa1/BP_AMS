@@ -17,6 +17,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { IEmployeeDailyReport } from '@/types';
+import { getTodayDateString } from '@/lib/utils';
 import { DrillDownModal, DrillDownItem } from './DrillDownModal';
 
 interface DailyReportViewProps {
@@ -30,7 +31,7 @@ export const DailyReportView: React.FC<DailyReportViewProps> = ({
   isEmployeeSelf = false,
   titleTag = 'h2',
 }) => {
-  const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState<string>(getTodayDateString());
   const [report, setReport] = useState<IEmployeeDailyReport | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -172,6 +173,35 @@ export const DailyReportView: React.FC<DailyReportViewProps> = ({
         </div>
       ) : report ? (
         <>
+          {/* Leave / Absence Banner if applicable */}
+          {(report.attendance.leave?.onLeave || report.attendance.status === 'ABSENT') && (
+            <div
+              className={`p-4 rounded-2xl border flex items-start justify-between gap-3 ${
+                report.attendance.leave?.onLeave
+                  ? 'bg-indigo-50 dark:bg-indigo-950/30 border-indigo-200 dark:border-indigo-900 text-indigo-900 dark:text-indigo-200'
+                  : 'bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900 text-rose-900 dark:text-rose-200'
+              }`}
+            >
+              <div className="text-xs space-y-1">
+                <div className="font-bold uppercase tracking-wider">
+                  {report.attendance.leave?.onLeave
+                    ? `On ${report.attendance.leave.status} Leave (${report.attendance.leave.leaveType} • ${
+                        report.attendance.leave.isPaid ? 'Paid' : 'Unpaid / LWP'
+                      })`
+                    : 'Marked Absent'}
+                </div>
+                <p className="text-sm font-medium">
+                  Reason: {report.attendance.leave?.reason || report.attendance.notes || 'No reason specified'}
+                </p>
+              </div>
+              {report.attendance.leave?.startDate && (
+                <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-white/70 dark:bg-slate-900/60 border border-current/20 shrink-0">
+                  {report.attendance.leave.startDate} → {report.attendance.leave.endDate}
+                </span>
+              )}
+            </div>
+          )}
+
           {/* System Summary Banner */}
           {report.notes?.systemSummary && (
             <div className="bg-gradient-to-r from-rose-500/10 via-amber-500/10 to-blue-500/10 border border-rose-500/20 p-5 rounded-2xl flex items-start gap-3">
@@ -196,22 +226,32 @@ export const DailyReportView: React.FC<DailyReportViewProps> = ({
                   {
                     id: 'att-1',
                     title: `Attendance Status: ${report.attendance.status}`,
-                    subtitle: `Check-in: ${
-                      report.attendance.checkIn
-                        ? new Date(report.attendance.checkIn).toLocaleTimeString()
-                        : 'None'
-                    } | Check-out: ${
-                      report.attendance.checkOut
-                        ? new Date(report.attendance.checkOut).toLocaleTimeString()
-                        : 'None'
-                    }`,
+                    subtitle: report.attendance.leave?.onLeave
+                      ? `Leave: ${report.attendance.leave.leaveType} (${report.attendance.leave.status}) — ${report.attendance.leave.reason || 'N/A'}`
+                      : `Check-in: ${
+                          report.attendance.checkIn
+                            ? new Date(report.attendance.checkIn).toLocaleTimeString()
+                            : 'None'
+                        } | Check-out: ${
+                          report.attendance.checkOut
+                            ? new Date(report.attendance.checkOut).toLocaleTimeString()
+                            : 'None'
+                        }`,
                     badgeText: report.attendance.status,
-                    badgeVariant: report.attendance.status === 'COMPLETED' ? 'success' : 'warning',
+                    badgeVariant:
+                      report.attendance.status === 'COMPLETED' || report.attendance.status === 'PRESENT'
+                        ? 'success'
+                        : report.attendance.status === 'ON_LEAVE'
+                        ? 'info'
+                        : report.attendance.status === 'ABSENT'
+                        ? 'danger'
+                        : 'warning',
                     meta: {
                       'Working Minutes': report.attendance.workingMinutes,
                       'Break Minutes': report.attendance.breakMinutes,
                       'Late Minutes': report.attendance.lateMinutes,
                       'Early Checkout': report.attendance.earlyCheckoutMinutes,
+                      ...(report.attendance.notes ? { Notes: report.attendance.notes } : {}),
                     },
                   },
                 ])
@@ -225,11 +265,23 @@ export const DailyReportView: React.FC<DailyReportViewProps> = ({
               <div className="text-2xl font-bold text-slate-900 dark:text-white mt-2">
                 {formatMins(report.attendance.workingMinutes)}
               </div>
-              <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-2">
-                <span>Status:</span>
-                <span className="font-semibold text-rose-600 dark:text-rose-400">
+              <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 mt-2">
+                <span
+                  className={`font-semibold ${
+                    report.attendance.status === 'ABSENT'
+                      ? 'text-rose-600 dark:text-rose-400'
+                      : report.attendance.status === 'ON_LEAVE'
+                      ? 'text-indigo-600 dark:text-indigo-400'
+                      : 'text-emerald-600 dark:text-emerald-400'
+                  }`}
+                >
                   {report.attendance.status}
                 </span>
+                {(report.attendance.isLate || report.attendance.lateMinutes > 0) && (
+                  <span className="px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 text-[10px] font-bold">
+                    Late (+{report.attendance.lateMinutes}m)
+                  </span>
+                )}
               </div>
             </div>
 

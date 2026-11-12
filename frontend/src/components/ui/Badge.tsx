@@ -35,6 +35,10 @@ export const Badge: React.FC<BadgeProps> = ({ children, variant, status, classNa
         computedVariant = 'danger';
         displayText = 'Absent';
         break;
+      case 'ON_LEAVE':
+        computedVariant = 'purple';
+        displayText = 'On Leave';
+        break;
       case 'MISSED_CHECKOUT':
         computedVariant = 'danger';
         displayText = 'Missed Checkout';

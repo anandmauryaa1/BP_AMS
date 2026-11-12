@@ -88,7 +88,7 @@ export const ADMIN_NAV_CATEGORIES: NavCategory[] = [
     footerHint: '👥 Employee Management, Attendance & Statutory Compliance',
     items: [
       { href: '/admin/employees', label: 'Team Management', description: 'Employee directory, roles & credentials', icon: Users },
-      { href: '/admin/operations-calendar', label: 'Common Calendar', description: 'Unified tasks, leaves & attendance calendar', icon: CalendarDays, badge: 'Unified' },
+      { href: '/admin/operations-calendar', label: 'All-In-One Calendar', description: 'Unified tasks, leaves & attendance calendar', icon: CalendarDays, badge: 'Unified' },
       { href: '/admin/attendance', label: 'Attendance Records', description: 'Biometric shift logs, duty events & hours', icon: CalendarCheck },
       { href: '/admin/leaves', label: 'Leave Requests', description: 'Leave approvals & quota balance', icon: Palmtree },
       { href: '/admin/payroll', label: 'Payroll & Tax', description: 'Salary runs, EPF, ESIC, PT & TDS engine', icon: Banknote, badge: 'Auto' },

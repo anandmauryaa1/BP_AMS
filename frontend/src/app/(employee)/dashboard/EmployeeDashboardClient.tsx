@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { Navbar } from '@/components/Navbar';
 import { MobileNav } from '@/components/MobileNav';
+import { AllInOneCalendarWidget } from '@/components/calendar/AllInOneCalendarWidget';
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -744,6 +745,9 @@ export default function EmployeeDashboardClient({
             </div>
           </div>
         </Card>
+
+        {/* 4. All-In-One Calendar */}
+        <AllInOneCalendarWidget mode="employee" />
 
         {/* Modal: Select or Switch Project */}
         <Modal

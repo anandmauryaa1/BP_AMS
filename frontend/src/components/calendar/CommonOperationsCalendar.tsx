@@ -455,14 +455,14 @@ export const CommonOperationsCalendar: React.FC<CommonOperationsCalendarProps> =
             <div className="flex flex-wrap items-center gap-2.5">
               <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
                 <CalendarDays className="w-6 h-6 text-rose-600 dark:text-rose-400" />
-                Unified Operations Calendar
+                All-In-One Calendar
               </h1>
               <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-300 border border-rose-500/20">
                 Tasks · Leaves · Attendance
               </span>
             </div>
             <p className="text-xs sm:text-sm text-slate-500 dark:text-zinc-400 mt-1">
-              Common studio calendar to manage tasks, leaves, and update attendance check-in, check-out & late status.
+              All-in-one studio calendar to manage tasks, leaves, and mark attendance (Present / Absent with reason, check-in, check-out &amp; late status).
             </p>
           </div>
 

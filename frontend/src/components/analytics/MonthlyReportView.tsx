@@ -266,12 +266,25 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
           {/* Key Metric Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-              <span className="text-xs text-slate-500">Total Work Time</span>
+              <span className="text-xs text-slate-500">Attendance &amp; Work Time</span>
               <div className="text-2xl font-bold text-slate-900 dark:text-white mt-2">
                 {formatHours(report.attendance.totalWorkingMinutes)}
               </div>
               <p className="text-xs text-slate-500 mt-1">
-                {report.attendance.presentDays} / {report.attendance.workingDays} days present
+                {report.attendance.presentDays} / {report.attendance.workingDays}d Present • Absent:{' '}
+                <span className={report.attendance.absentDays > 0 ? 'text-rose-600 dark:text-rose-400 font-semibold' : ''}>
+                  {report.attendance.absentDays}d
+                </span>
+              </p>
+              <p className="text-[11px] text-indigo-600 dark:text-indigo-400 font-medium mt-0.5">
+                Leave: {report.attendance.leaveDays}d (Paid: {report.attendance.paidLeaveDays || 0}d • LWP:{' '}
+                {report.attendance.unpaidLeaveDays || 0}d
+                {(report.attendance.pendingLeaveDays || 0) > 0
+                  ? ` • Pending: ${report.attendance.pendingLeaveDays}d`
+                  : ''})
+              </p>
+              <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-0.5">
+                Late: {report.attendance.lateCount} ({report.attendance.totalLateMinutes || 0}m)
               </p>
             </div>
 
@@ -306,6 +319,43 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
             </div>
           </div>
 
+          {/* Leave Breakdown (if any leaves exist in month) */}
+          {Array.isArray(report.attendance.leaveDetails) && report.attendance.leaveDetails.length > 0 && (
+            <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                Monthly Leave Records ({report.attendance.leaveDetails.length})
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {report.attendance.leaveDetails.map((lv, idx) => (
+                  <div
+                    key={lv.id || idx}
+                    className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-start justify-between gap-3 text-xs"
+                  >
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-white">
+                        {lv.leaveType} ({lv.daysInRange}d) — {lv.startDate} to {lv.endDate}
+                      </div>
+                      <div className="text-slate-600 dark:text-slate-300 mt-0.5">
+                        {lv.reason || 'No reason provided'}
+                      </div>
+                    </div>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase shrink-0 ${
+                        lv.status === 'APPROVED'
+                          ? lv.isPaid
+                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                            : 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
+                          : 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300'
+                      }`}
+                    >
+                      {lv.status} • {lv.isPaid ? 'Paid' : 'LWP'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Weekly Trends Matrix */}
           <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
             <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
@@ -313,7 +363,7 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
               Weekly Performance Trends Breakdown
             </h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 pt-2">
               {report.trends.weeklyCompletion.map((w, idx) => (
                 <div
                   key={w.week}
@@ -336,6 +386,43 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
               ))}
             </div>
           </div>
+
+          {/* Time Allocation by Task Type & Platform */}
+          {report.timeAllocation && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Time Allocation by Task Type</h3>
+                {(report.timeAllocation.taskTypes || []).length === 0 ? (
+                  <p className="text-xs text-slate-400">No task-type sessions logged in this month.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {report.timeAllocation.taskTypes.map((tt: any, idx: number) => (
+                      <div key={idx} className="flex items-center justify-between text-xs p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+                        <span className="font-semibold text-slate-700 dark:text-slate-200">{tt.taskType}</span>
+                        <span className="font-mono font-bold text-rose-600 dark:text-rose-400">{formatHours(tt.minutes)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Time Allocation by Platform</h3>
+                {(report.timeAllocation.platforms || []).length === 0 ? (
+                  <p className="text-xs text-slate-400">No platform deliverables/sessions logged in this month.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {report.timeAllocation.platforms.map((pf: any, idx: number) => (
+                      <div key={idx} className="flex items-center justify-between text-xs p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+                        <span className="font-semibold text-slate-700 dark:text-slate-200">{pf.platform}</span>
+                        <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{formatHours(pf.minutes)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </>
       ) : null}
     </div>
