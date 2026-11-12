@@ -41,6 +41,7 @@ vi.mock('../services/email.js', () => ({
     sendLeaveDeletedEmail: mockSendLeaveDeletedEmail,
     sendLeaveDecisionEmail: mockSendLeaveDecisionEmail,
     sendLeaveApplicationEmails: mockSendLeaveApplicationEmails,
+    sendLeaveCancelledEmails: vi.fn().mockResolvedValue({ success: true }),
     getRequestClientUrl: vi.fn().mockReturnValue(''),
 }));
 
@@ -75,6 +76,28 @@ vi.mock('../models/User.js', () => ({
 
 vi.mock('../services/leave-accrual-engine.js', () => ({
     calculateEmployeeLeaveBalances: vi.fn().mockResolvedValue([]),
+}));
+
+vi.mock('../models/SystemSettings.js', () => ({
+    SystemSettings: {
+        findOne: vi.fn().mockImplementation(() => ({
+            select: () => ({
+                lean: async () => ({ emailNotificationsEnabled: true, companyName: 'Blindera Productions' }),
+            }),
+        })),
+    },
+}));
+
+vi.mock('../models/Project.js', () => ({
+    Project: {
+        findById: vi.fn().mockImplementation(() => ({
+            populate: () => ({
+                populate: () => ({
+                    lean: async () => null,
+                }),
+            }),
+        })),
+    },
 }));
 
 vi.mock('../models/LeaveRequest.js', () => {

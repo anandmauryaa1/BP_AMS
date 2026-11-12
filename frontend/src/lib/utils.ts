@@ -13,6 +13,18 @@ export function getTodayDateString(dateInput?: Date | string): string {
   return `${year}-${month}-${day}`;
 }
 
+export function toLocalDateTimeInput(dateInput?: Date | string | null): string {
+  if (!dateInput) return '';
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return '';
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const hours = String(d.getHours()).padStart(2, '0');
+  const mins = String(d.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${mins}`;
+}
+
 export function formatDate(dateString?: string | Date): string {
   if (!dateString) return 'N/A';
   const d = new Date(dateString);

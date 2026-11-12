@@ -424,6 +424,13 @@ export default function AdminLeavesClient({ initialLeaves = [], initialEmployees
                   </button>
                 </div>
 
+                <a
+                  href="/admin/operations-calendar?layer=LEAVE"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-semibold text-slate-700 dark:text-zinc-200 hover:border-rose-500/40 hover:text-rose-600 dark:hover:text-rose-400 transition shadow-sm"
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  Common Calendar
+                </a>
                 <button
                   onClick={() => openCreateModal()}
                   className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold shadow-md shadow-rose-600/20 transition"

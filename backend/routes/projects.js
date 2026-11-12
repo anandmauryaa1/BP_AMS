@@ -3,6 +3,8 @@ import { connectToDatabase } from '../db.js';
 import { Project } from '../models/Project.js';
 import { authenticateToken, requireManagerOrAdmin } from '../middleware/auth.js';
 import { realTimeService } from '../services/RealTimeService.js';
+import { sendProjectNotificationEmails, getRequestClientUrl } from '../services/email.js';
+import { resolveStakeholders, isOperationalEmailEnabled } from '../services/stakeholders.js';
 
 const router = Router();
 router.use(authenticateToken);
@@ -76,6 +78,23 @@ router.post('/', requireManagerOrAdmin, async (req, res) => {
 
         const project = await Project.create(payload);
         try {
+            const enabled = await isOperationalEmailEnabled();
+            if (enabled) {
+                const stakeholders = await resolveStakeholders({ projectId: project._id, category: 'GENERAL' });
+                if (stakeholders.enabled) {
+                    await sendProjectNotificationEmails({
+                        project,
+                        actionType: 'CREATED',
+                        actorName: req.user?.name || 'Management',
+                        recipientEmails: stakeholders.managementEmails,
+                        clientUrl: getRequestClientUrl(req),
+                    });
+                }
+            }
+        } catch (emailErr) {
+            console.warn('[EmailNotification:ProjectCreate] Non-fatal email error:', emailErr);
+        }
+        try {
             realTimeService.broadcast('PROJECT_CREATED', {
                 project,
                 createdBy: req.user,
@@ -125,6 +144,24 @@ const handleUpdateProject = async (req, res) => {
             .populate('teamMembers', 'name employeeId email department');
         if (!updated) {
             return res.status(404).json({ success: false, error: 'Project not found' });
+        }
+
+        try {
+            const stakeholders = await resolveStakeholders({ projectId: updated._id, category: 'GENERAL' });
+            const memberEmails = Array.isArray(updated.teamMembers)
+                ? updated.teamMembers.map((m) => m?.email).filter(Boolean)
+                : [];
+            if (stakeholders.enabled) {
+                await sendProjectNotificationEmails({
+                    project: updated,
+                    actionType: 'UPDATED',
+                    actorName: req.user?.name || 'Management',
+                    recipientEmails: [...stakeholders.managementEmails, ...memberEmails],
+                    clientUrl: getRequestClientUrl(req),
+                });
+            }
+        } catch (emailErr) {
+            console.warn('[EmailNotification:ProjectUpdate] Non-fatal email error:', emailErr);
         }
 
         // Broadcast real-time update across all connected users

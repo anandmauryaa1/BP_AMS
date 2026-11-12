@@ -8,6 +8,8 @@ import { User } from '../models/User.js';
 import { authenticateToken, requireManagerOrAdmin } from '../middleware/auth.js';
 import { generateMonthlyPayroll } from '../services/payroll-calculator.js';
 import { logAuditEvent } from '../services/audit.js';
+import { sendLoanNotificationEmails, sendPayrollPayslipEmails, getRequestClientUrl } from '../services/email.js';
+import { resolveStakeholders, isOperationalEmailEnabled } from '../services/stakeholders.js';
 
 const router = Router();
 router.use(authenticateToken);
@@ -329,6 +331,27 @@ router.post('/loans', async (req, res) => {
             ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1'
         });
 
+        try {
+            const stakeholders = await resolveStakeholders({
+                employeeId: empCode,
+                includeAdmins: true,
+                category: 'PAYROLL',
+            });
+            if (stakeholders.enabled) {
+                await sendLoanNotificationEmails({
+                    loan,
+                    actionType: 'CREATED',
+                    actorName: req.user?.name || empName,
+                    employeeEmail: stakeholders.employee?.email,
+                    employeeName: stakeholders.employee?.name || empName,
+                    managerEmails: stakeholders.managementEmails,
+                    clientUrl: getRequestClientUrl(req),
+                });
+            }
+        } catch (emailErr) {
+            console.warn('[EmailNotification:LoanCreate] Non-fatal email error:', emailErr);
+        }
+
         return res.status(201).json({
             success: true,
             data: { ...loan.toObject(), maxLoanAllowed },
@@ -411,6 +434,26 @@ router.put('/loans/:id', requireManagerOrAdmin, async (req, res) => {
             ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1'
         });
 
+        try {
+            const stakeholders = await resolveStakeholders({
+                employeeId: loan.employeeId,
+                category: 'PAYROLL',
+            });
+            if (stakeholders.enabled) {
+                await sendLoanNotificationEmails({
+                    loan,
+                    actionType: 'UPDATED',
+                    actorName: req.user?.name || 'Admin',
+                    employeeEmail: stakeholders.employee?.email,
+                    employeeName: stakeholders.employee?.name || loan.employeeName,
+                    managerEmails: stakeholders.managementEmails,
+                    clientUrl: getRequestClientUrl(req),
+                });
+            }
+        } catch (emailErr) {
+            console.warn('[EmailNotification:LoanUpdate] Non-fatal email error:', emailErr);
+        }
+
         return res.json({ success: true, data: loan, loan: loan });
     } catch (error) {
         console.error('[API:Payroll:Loans:PUT] Error:', error);
@@ -427,7 +470,7 @@ const handleRunPayroll = async (req, res) => {
         }
         const results = await generateMonthlyPayroll(parseInt(month, 10), parseInt(year, 10), employeeId);
         
-        const users = await User.find({}).select('_id employeeId username name email department designation').lean();
+        const users = await User.find({}).select('_id employeeId username name email department designation emailNotifications payslipAlerts').lean();
         const userMap = new Map();
         users.forEach(u => {
             if (u._id) userMap.set(String(u._id), u);
@@ -490,6 +533,27 @@ const handleRunPayroll = async (req, res) => {
             ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1'
         });
 
+        try {
+            const emailEnabled = await isOperationalEmailEnabled();
+            if (emailEnabled) {
+                const emailableRecords = records.filter((rec) => {
+                    const empUser = userMap.get(String(rec.employeeId?.employeeId || rec.employeeId));
+                    return empUser && empUser.email && empUser.emailNotifications !== false && empUser.payslipAlerts !== false;
+                });
+                if (emailableRecords.length > 0) {
+                    await sendPayrollPayslipEmails({
+                        records: emailableRecords,
+                        month: parseInt(month, 10),
+                        year: parseInt(year, 10),
+                        actorName: req.user?.name || 'Payroll Admin',
+                        clientUrl: getRequestClientUrl(req),
+                    });
+                }
+            }
+        } catch (emailErr) {
+            console.warn('[EmailNotification:PayrollRun] Non-fatal email error:', emailErr);
+        }
+
         return res.json({
             success: true,
             message: `Payroll generated successfully for ${records.length} employees`,
@@ -533,7 +597,7 @@ const handleGetRuns = async (req, res) => {
 
         const rawRuns = await PayrollRun.find(query).sort({ year: -1, month: -1 }).lean();
 
-        const users = await User.find({}).select('_id employeeId username name email department designation').lean();
+        const users = await User.find({}).select('_id employeeId username name email department designation emailNotifications payslipAlerts').lean();
         const userMap = new Map();
         users.forEach(u => {
             if (u._id) userMap.set(String(u._id), u);

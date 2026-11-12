@@ -9,8 +9,16 @@ import { Task } from '../models/Task.js';
 import { Deliverable } from '../models/Deliverable.js';
 import { authenticateToken, requireManagerOrAdmin, hashPassword } from '../middleware/auth.js';
 import { logAuditEvent } from '../services/audit.js';
-import { sendEmail, sendWelcomeEmail, sendAdminPasswordResetEmail, getRequestClientUrl } from '../services/email.js';
-import { calculateLateCheckIn, getEmployeeShiftConfig } from '../services/attendance.js';
+import {
+    sendEmail,
+    sendWelcomeEmail,
+    sendAdminPasswordResetEmail,
+    sendAttendanceUpdatedEmails,
+    sendAttendanceCorrectionDecisionEmails,
+    getRequestClientUrl,
+} from '../services/email.js';
+import { resolveStakeholders } from '../services/stakeholders.js';
+import { calculateLateCheckIn, computeAdminAttendancePatch, getEmployeeShiftConfig } from '../services/attendance.js';
 import { getTodayDateString } from '../utils/index.js';
 const router = Router();
 const CreateEmployeeSchema = z.object({
@@ -464,6 +472,9 @@ router.get('/attendance', async (req, res) => {
     try {
         await connectToDatabase();
         const date = req.query.date || getTodayDateString();
+        const month = req.query.month; // Optional YYYY-MM for calendar range
+        const startDate = req.query.startDate;
+        const endDate = req.query.endDate;
         const department = req.query.department;
         const status = req.query.status;
         const punctuality = req.query.punctuality; // 'ALL' | 'LATE' | 'ON_TIME'
@@ -475,7 +486,7 @@ router.get('/attendance', async (req, res) => {
         if (department && department !== 'ALL') {
             userQuery.department = department;
         }
-        if (employeeId) {
+        if (employeeId && employeeId !== 'ALL') {
             userQuery.$or = [
                 { employeeId: { $regex: employeeId, $options: 'i' } },
                 { name: { $regex: employeeId, $options: 'i' } },
@@ -484,6 +495,63 @@ router.get('/attendance', async (req, res) => {
 
         const users = await User.find(userQuery).select('name employeeId department designation role').lean();
         const empIds = users.map((u) => u.employeeId);
+        const userMap = new Map(users.map((u) => [u.employeeId, u]));
+
+        const isRangeMode = Boolean(month || (startDate && endDate));
+        if (isRangeMode) {
+            const rangeStart = startDate || `${month}-01`;
+            const rangeEnd = endDate || `${month}-31`;
+            const rangeQuery = {
+                date: { $gte: rangeStart, $lte: rangeEnd },
+                employeeId: { $in: empIds },
+            };
+            if (status && status !== 'ALL') {
+                rangeQuery.status = status;
+            }
+            const attendances = await Attendance.find(rangeQuery).sort({ date: 1, employeeId: 1 }).lean();
+            let records = attendances.map((att) => {
+                const u = userMap.get(att.employeeId);
+                return {
+                    _id: att._id,
+                    employeeId: att.employeeId,
+                    employeeName: u?.name || att.employeeId,
+                    department: u?.department || '',
+                    designation: u?.designation || '',
+                    date: att.date,
+                    status: att.status,
+                    checkIn: att.checkIn,
+                    checkOut: att.checkOut,
+                    totalWorkingMinutes: att.totalWorkingMinutes || 0,
+                    totalBreakMinutes: att.totalBreakMinutes || 0,
+                    isLate: Boolean(att.isLate || (att.lateMinutes && att.lateMinutes > 0)),
+                    lateMinutes: att.lateMinutes || 0,
+                    scheduledShiftStart: att.scheduledShiftStart || '09:30',
+                    lateGraceMinutes: att.lateGraceMinutes || 15,
+                    correction: att.correction,
+                    breaks: att.breaks || [],
+                    sessions: att.sessions || [],
+                };
+            });
+
+            if (punctuality === 'LATE' || req.query.isLate === 'true') {
+                records = records.filter((r) => r.isLate || (r.lateMinutes && r.lateMinutes > 0));
+            } else if (punctuality === 'ON_TIME') {
+                records = records.filter((r) => r.status !== 'NOT_CHECKED_IN' && !r.isLate && (!r.lateMinutes || r.lateMinutes === 0));
+            }
+
+            return res.json({
+                success: true,
+                data: {
+                    records,
+                    pagination: {
+                        totalRecords: records.length,
+                        page: 1,
+                        limit: records.length || 1,
+                        totalPages: 1,
+                    },
+                },
+            });
+        }
 
         let attQuery = { date, employeeId: { $in: empIds } };
         if (status && status !== 'ALL') {
@@ -574,53 +642,60 @@ router.get('/attendance', async (req, res) => {
 router.patch('/attendance', async (req, res) => {
     try {
         await connectToDatabase();
-        const { attendanceId, status, checkIn, checkOut, reason } = req.body;
-        if (!attendanceId) {
-            return res.status(400).json({ success: false, error: 'Attendance ID is required' });
+        const { attendanceId, employeeId, date, status, checkIn, checkOut, isLate, lateMinutes, reason } = req.body;
+        if (!attendanceId && (!employeeId || !date)) {
+            return res.status(400).json({ success: false, error: 'Attendance ID or employeeId + date is required' });
         }
-        let record = await Attendance.findById(attendanceId);
+
+        let record = attendanceId ? await Attendance.findById(attendanceId) : null;
+        if (!record && employeeId && date) {
+            record = await Attendance.findOne({ employeeId: String(employeeId).trim().toUpperCase(), date });
+        }
+
         if (!record) {
-            const user = await User.findById(attendanceId).lean();
-            if (user) {
-                const todayStr = getTodayDateString();
-                const checkInDate = checkIn ? new Date(checkIn) : new Date();
-                const shiftCfg = await getEmployeeShiftConfig(user.employeeId, todayStr);
-                const lateCalc = calculateLateCheckIn(checkInDate, shiftCfg.shiftStartTime, shiftCfg.graceMinutes);
-                record = await Attendance.create({
-                    employeeId: user.employeeId,
-                    date: todayStr,
-                    status: status || 'PRESENT',
-                    checkIn: checkInDate,
-                    checkOut: checkOut ? new Date(checkOut) : null,
-                    isLate: lateCalc.isLate,
-                    lateMinutes: lateCalc.lateMinutes,
-                    scheduledShiftStart: lateCalc.scheduledShiftStart,
-                    lateGraceMinutes: lateCalc.lateGraceMinutes,
-                });
-            } else {
-                return res.status(404).json({ success: false, error: 'Attendance record not found' });
+            let targetEmpId = employeeId ? String(employeeId).trim().toUpperCase() : null;
+            if (!targetEmpId && attendanceId) {
+                const user = await User.findById(attendanceId).lean();
+                targetEmpId = user?.employeeId || null;
             }
+            if (!targetEmpId) {
+                return res.status(404).json({ success: false, error: 'Attendance record or employee not found' });
+            }
+            const targetDate = date || getTodayDateString();
+            const shiftCfg = await getEmployeeShiftConfig(targetEmpId, targetDate);
+            const patch = computeAdminAttendancePatch({
+                existing: null,
+                status,
+                checkIn,
+                checkOut,
+                isLate,
+                lateMinutes,
+                shiftCfg,
+            });
+            record = await Attendance.create({
+                employeeId: targetEmpId,
+                date: targetDate,
+                ...patch,
+            });
         } else {
-            if (status) record.status = status;
-            if (checkIn !== undefined) {
-                record.checkIn = checkIn ? new Date(checkIn) : null;
-                if (record.checkIn) {
-                    const shiftCfg = await getEmployeeShiftConfig(record.employeeId, record.date);
-                    const lateCalc = calculateLateCheckIn(record.checkIn, shiftCfg.shiftStartTime, shiftCfg.graceMinutes);
-                    record.isLate = lateCalc.isLate;
-                    record.lateMinutes = lateCalc.lateMinutes;
-                    record.scheduledShiftStart = lateCalc.scheduledShiftStart;
-                    record.lateGraceMinutes = lateCalc.lateGraceMinutes;
-                } else {
-                    record.isLate = false;
-                    record.lateMinutes = 0;
-                }
-            }
-            if (checkOut !== undefined) record.checkOut = checkOut ? new Date(checkOut) : null;
-            if (record.checkIn && record.checkOut) {
-                const diffMs = record.checkOut.getTime() - record.checkIn.getTime();
-                record.totalWorkingMinutes = Math.max(0, Math.floor(diffMs / 60000) - (record.totalBreakMinutes || 0));
-            }
+            const shiftCfg = await getEmployeeShiftConfig(record.employeeId, record.date);
+            const patch = computeAdminAttendancePatch({
+                existing: record,
+                status,
+                checkIn,
+                checkOut,
+                isLate,
+                lateMinutes,
+                shiftCfg,
+            });
+            record.status = patch.status;
+            record.checkIn = patch.checkIn;
+            record.checkOut = patch.checkOut;
+            record.isLate = patch.isLate;
+            record.lateMinutes = patch.lateMinutes;
+            record.scheduledShiftStart = patch.scheduledShiftStart;
+            record.lateGraceMinutes = patch.lateGraceMinutes;
+            record.totalWorkingMinutes = patch.totalWorkingMinutes;
             await record.save();
         }
 
@@ -631,15 +706,53 @@ router.patch('/attendance', async (req, res) => {
             action: 'ATTENDANCE_MANUAL_CORRECTION',
             targetId: record._id.toString(),
             targetType: 'ATTENDANCE',
-            metadata: { reason, status, checkIn, checkOut },
+            metadata: {
+                employeeId: record.employeeId,
+                date: record.date,
+                reason,
+                status: record.status,
+                checkIn: record.checkIn,
+                checkOut: record.checkOut,
+                isLate: record.isLate,
+                lateMinutes: record.lateMinutes,
+            },
             ipAddress: req.ip,
         });
+
+        try {
+            const changesSummary = [];
+            if (status !== undefined) changesSummary.push('Status');
+            if (checkIn !== undefined) changesSummary.push('Check-In');
+            if (checkOut !== undefined) changesSummary.push('Check-Out');
+            if (isLate !== undefined || lateMinutes !== undefined) changesSummary.push('Late Status/Minutes');
+
+            const stakeholders = await resolveStakeholders({
+                employeeId: record.employeeId,
+                category: 'ATTENDANCE',
+            });
+            if (stakeholders.enabled) {
+                await sendAttendanceUpdatedEmails({
+                    record,
+                    employeeEmail: stakeholders.employee?.email,
+                    employeeName: stakeholders.employee?.name || record.employeeId,
+                    actorName: req.user?.name || 'Admin',
+                    reason: reason || '',
+                    changesSummary,
+                    managerEmails: stakeholders.managementEmails,
+                    clientUrl: getRequestClientUrl(req),
+                });
+            }
+        } catch (emailErr) {
+            console.warn('[EmailNotification:AdminAttendancePatch] Non-fatal email error:', emailErr);
+        }
 
         return res.json({ success: true, message: 'Attendance record updated successfully', data: record });
     }
     catch (error) {
         console.error('[API:Admin:Attendance:PATCH] Error:', error);
-        return res.status(500).json({ success: false, error: 'Failed to update attendance record' });
+        const msg = error?.message || 'Failed to update attendance record';
+        const isClientErr = msg.includes('Invalid') || msg.includes('earlier');
+        return res.status(isClientErr ? 400 : 500).json({ success: false, error: msg, message: msg });
     }
 });
 
@@ -688,6 +801,27 @@ router.patch('/attendance/correction/:id', async (req, res) => {
             metadata: { decision, reviewNotes },
             ipAddress: req.ip,
         });
+
+        try {
+            const stakeholders = await resolveStakeholders({
+                employeeId: record.employeeId,
+                category: 'ATTENDANCE',
+            });
+            if (stakeholders.enabled) {
+                await sendAttendanceCorrectionDecisionEmails({
+                    record,
+                    decision,
+                    reviewNotes,
+                    reviewerName: req.user?.name || 'Admin',
+                    employeeEmail: stakeholders.employee?.email,
+                    employeeName: stakeholders.employee?.name || record.employeeId,
+                    managerEmails: stakeholders.managementEmails,
+                    clientUrl: getRequestClientUrl(req),
+                });
+            }
+        } catch (emailErr) {
+            console.warn('[EmailNotification:AttendanceCorrectionDecision] Non-fatal email error:', emailErr);
+        }
 
         return res.json({ success: true, message: `Correction request ${decision === 'APPROVE' ? 'approved' : 'rejected'}` });
     }

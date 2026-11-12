@@ -6,6 +6,12 @@ import { authenticateToken, requireManagerOrAdmin } from '../middleware/auth.js'
 import { getTodayAttendance, checkIn, startBreak, endBreak, checkOut, } from '../services/attendance.js';
 import { getTodayDateString } from '../utils/index.js';
 import { validateGeofenceCheckIn } from '../services/geofence-service.js';
+import {
+    sendLateCheckInAlertEmails,
+    sendAttendanceCorrectionRequestEmails,
+    getRequestClientUrl,
+} from '../services/email.js';
+import { resolveStakeholders } from '../services/stakeholders.js';
 
 const router = Router();
 router.use(authenticateToken);
@@ -103,6 +109,25 @@ router.post('/check-in', async (req, res) => {
         const result = await checkIn(employeeId, location);
         if (!result.success) {
             return res.status(400).json(result);
+        }
+        if (result.attendance?.isLate) {
+            try {
+                const stakeholders = await resolveStakeholders({
+                    employeeId,
+                    category: 'ATTENDANCE',
+                });
+                if (stakeholders.enabled) {
+                    await sendLateCheckInAlertEmails({
+                        attendance: result.attendance,
+                        employeeEmail: stakeholders.employee?.email,
+                        employeeName: stakeholders.employee?.name || req.user?.name || employeeId,
+                        managerEmails: stakeholders.managementEmails,
+                        clientUrl: getRequestClientUrl(req),
+                    });
+                }
+            } catch (emailErr) {
+                console.warn('[EmailNotification:LateCheckIn] Non-fatal email error:', emailErr);
+            }
         }
         return res.json(result);
     }
@@ -301,6 +326,24 @@ router.post('/correction', async (req, res) => {
             status: 'PENDING',
         };
         await attendance.save();
+        try {
+            const stakeholders = await resolveStakeholders({
+                employeeId: attendance.employeeId,
+                includeAdmins: true,
+                category: 'ATTENDANCE',
+            });
+            if (stakeholders.enabled) {
+                await sendAttendanceCorrectionRequestEmails({
+                    record: attendance,
+                    employeeEmail: stakeholders.employee?.email,
+                    employeeName: stakeholders.employee?.name || req.user?.name || attendance.employeeId,
+                    managerEmails: stakeholders.managementEmails,
+                    clientUrl: getRequestClientUrl(req),
+                });
+            }
+        } catch (emailErr) {
+            console.warn('[EmailNotification:AttendanceCorrectionReq] Non-fatal email error:', emailErr);
+        }
         return res.json({
             success: true,
             message: 'Correction request submitted for Admin review',

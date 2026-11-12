@@ -8,21 +8,24 @@ import { recordTaskEvent, recordReviewEvent } from '../services/events.js';
 import { notifyTaskScheduled, notifyTaskStatusUpdate, notifyTaskRescheduled, notifyTaskReassigned, } from '../services/pushNotification.js';
 import { realTimeService } from '../services/RealTimeService.js';
 import { escapeRegExp, resolveUserObjectId } from '../utils/index.js';
+import { sendTaskNotificationEmails, getRequestClientUrl } from '../services/email.js';
+import { resolveStakeholders, resolveUserRecord } from '../services/stakeholders.js';
 const router = Router();
 router.use(authenticateToken);
 router.get('/', async (req, res) => {
     try {
         await connectToDatabase();
-        const { projectId, assignedTo, status, priority, taskType, search, myTasks } = req.query;
+        const { projectId, assignedTo, assigneeId, status, priority, taskType, search, myTasks, startDate, endDate } = req.query;
         const query = {};
         if (projectId)
             query.projectId = projectId;
+        const resolvedAssigneeParam = assignedTo || assigneeId;
         if (myTasks === 'true' && req.user?.userId) {
             query.assignedTo = req.user.userId;
-        } else if (assignedTo === 'unassigned' || assignedTo === 'none') {
+        } else if (resolvedAssigneeParam === 'unassigned' || resolvedAssigneeParam === 'none') {
             query.assignedTo = { $in: [null, undefined] };
-        } else if (assignedTo) {
-            const resolvedId = await resolveUserObjectId(assignedTo, User);
+        } else if (resolvedAssigneeParam && resolvedAssigneeParam !== 'ALL') {
+            const resolvedId = await resolveUserObjectId(resolvedAssigneeParam, User);
             if (resolvedId) {
                 query.assignedTo = resolvedId;
             }
@@ -33,12 +36,31 @@ router.get('/', async (req, res) => {
             query.priority = priority;
         if (taskType && taskType !== 'ALL')
             query.taskType = taskType;
+        if (startDate || endDate) {
+            const rangeStart = startDate ? new Date(`${startDate}T00:00:00.000Z`) : null;
+            const rangeEnd = endDate ? new Date(`${endDate}T23:59:59.999Z`) : null;
+            const dateBounds = {};
+            if (rangeStart && !isNaN(rangeStart.getTime())) dateBounds.$gte = rangeStart;
+            if (rangeEnd && !isNaN(rangeEnd.getTime())) dateBounds.$lte = rangeEnd;
+            if (Object.keys(dateBounds).length > 0) {
+                query.$and = query.$and || [];
+                query.$and.push({
+                    $or: [
+                        { dueDate: dateBounds },
+                        { startDate: dateBounds },
+                    ],
+                });
+            }
+        }
         if (search) {
             const safeSearch = escapeRegExp(String(search));
-            query.$or = [
-                { title: { $regex: safeSearch, $options: 'i' } },
-                { description: { $regex: safeSearch, $options: 'i' } },
-            ];
+            query.$and = query.$and || [];
+            query.$and.push({
+                $or: [
+                    { title: { $regex: safeSearch, $options: 'i' } },
+                    { description: { $regex: safeSearch, $options: 'i' } },
+                ],
+            });
         }
         const tasks = await Task.find(query)
             .populate('projectId', 'title code')
@@ -155,6 +177,32 @@ router.post('/', requireManagerOrAdmin, async (req, res) => {
         catch (pushErr) {
             console.warn('[PushNotification:Task] Non-fatal notification error:', pushErr);
         }
+
+        try {
+            const stakeholders = await resolveStakeholders({
+                employeeUserId: task.assignedTo,
+                projectId: task.projectId,
+                category: 'TASK',
+            });
+            if (stakeholders.enabled) {
+                const populatedForMail = {
+                    ...task.toObject(),
+                    projectId: stakeholders.project ? { _id: stakeholders.project._id, title: stakeholders.project.title } : task.projectId,
+                };
+                await sendTaskNotificationEmails({
+                    task: populatedForMail,
+                    eventType: 'CREATED',
+                    actorName: req.user?.name || task.assignedByName || 'Management',
+                    assigneeEmail: stakeholders.employee?.email,
+                    assigneeName: stakeholders.employee?.name || task.assignedToName,
+                    managerEmails: stakeholders.managementEmails,
+                    clientUrl: getRequestClientUrl(req),
+                });
+            }
+        } catch (emailErr) {
+            console.warn('[EmailNotification:TaskCreate] Non-fatal email error:', emailErr);
+        }
+
         // Broadcast real-time synchronous update across all client screens
         try {
             realTimeService.broadcast('TASK_CREATED', {
@@ -357,6 +405,47 @@ const handleUpdateTask = async (req, res) => {
                 console.warn('[PushNotification:TaskReschedule] Non-fatal notification error:', pushErr);
             }
         }
+        // Send email update to employee (and previous assignee if changed), managers & team leads
+        try {
+            const changesSummary = [];
+            if (updates.status && updates.status !== oldStatus) changesSummary.push(`Status (${oldStatus} -> ${updates.status})`);
+            const reassigned = updates.assignedTo !== undefined && String(updates.assignedTo || '') !== String(oldTask.assignedTo || '');
+            if (reassigned) changesSummary.push('Assignee');
+            const rescheduled = updates.dueDate && (!oldTask.dueDate || new Date(updates.dueDate).getTime() !== new Date(oldTask.dueDate).getTime());
+            if (rescheduled) changesSummary.push('Due Date');
+            if (updates.priority && updates.priority !== oldTask.priority) changesSummary.push(`Priority (${updates.priority})`);
+            if (updates.title && updates.title !== oldTask.title) changesSummary.push('Title');
+
+            if (changesSummary.length > 0) {
+                const assigneeUserId = updatedTask.assignedTo?._id || updatedTask.assignedTo;
+                const projId = updatedTask.projectId?._id || updatedTask.projectId;
+                const stakeholders = await resolveStakeholders({
+                    employeeUserId: assigneeUserId,
+                    projectId: projId,
+                    category: 'TASK',
+                });
+                if (stakeholders.enabled) {
+                    const prevUser = reassigned && oldTask.assignedTo ? await resolveUserRecord(oldTask.assignedTo) : null;
+                    const eventType = reassigned ? 'REASSIGNED' : (rescheduled && !(updates.status && updates.status !== oldStatus)) ? 'RESCHEDULED' : 'UPDATED';
+                    await sendTaskNotificationEmails({
+                        task: updatedTask,
+                        eventType,
+                        actorName: req.user?.name || 'Management',
+                        changesSummary,
+                        assigneeEmail: stakeholders.employee?.email,
+                        assigneeName: stakeholders.employee?.name || updatedTask.assignedToName,
+                        previousAssigneeEmail: prevUser?.emailNotifications !== false && prevUser?.taskAlerts !== false ? prevUser?.email : undefined,
+                        previousAssigneeName: prevUser?.name,
+                        managerEmails: stakeholders.managementEmails,
+                        notes: updates.reviewNotes || '',
+                        clientUrl: getRequestClientUrl(req),
+                    });
+                }
+            }
+        } catch (emailErr) {
+            console.warn('[EmailNotification:TaskUpdate] Non-fatal email error:', emailErr);
+        }
+
         // Broadcast real-time synchronous update across all connected clients
         try {
             realTimeService.broadcast('TASK_UPDATED', {
@@ -399,6 +488,26 @@ router.delete('/:id', requireManagerOrAdmin, async (req, res) => {
         const deleted = await Task.findByIdAndDelete(req.params.id);
         if (!deleted) {
             return res.status(404).json({ success: false, error: 'Task not found' });
+        }
+        try {
+            const stakeholders = await resolveStakeholders({
+                employeeUserId: deleted.assignedTo,
+                projectId: deleted.projectId,
+                category: 'TASK',
+            });
+            if (stakeholders.enabled) {
+                await sendTaskNotificationEmails({
+                    task: deleted,
+                    eventType: 'DELETED',
+                    actorName: req.user?.name || 'Admin',
+                    assigneeEmail: stakeholders.employee?.email,
+                    assigneeName: stakeholders.employee?.name || deleted.assignedToName,
+                    managerEmails: stakeholders.managementEmails,
+                    clientUrl: getRequestClientUrl(req),
+                });
+            }
+        } catch (emailErr) {
+            console.warn('[EmailNotification:TaskDelete] Non-fatal email error:', emailErr);
         }
         try {
             realTimeService.broadcast('TASK_DELETED', {

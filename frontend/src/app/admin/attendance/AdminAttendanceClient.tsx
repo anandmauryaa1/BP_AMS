@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { Navbar } from '@/components/Navbar';
 import { AdminNav } from '@/components/AdminNav';
 import { Card } from '@/components/ui/Card';
@@ -8,7 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { formatTime, formatMinutes, formatDate, getTodayDateString } from '@/lib/utils';
+import { formatTime, formatMinutes, formatDate, getTodayDateString, toLocalDateTimeInput } from '@/lib/utils';
 import {
   Calendar,
   Search,
@@ -44,6 +45,8 @@ export default function AdminAttendanceClient({ initialRecords = [] }: Props) {
   const [editStatus, setEditStatus] = useState<AttendanceStatus>('PRESENT');
   const [editCheckIn, setEditCheckIn] = useState('');
   const [editCheckOut, setEditCheckOut] = useState('');
+  const [editIsLate, setEditIsLate] = useState(false);
+  const [editLateMinutes, setEditLateMinutes] = useState('0');
   const [editReason, setEditReason] = useState('');
   const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
 
@@ -86,9 +89,11 @@ export default function AdminAttendanceClient({ initialRecords = [] }: Props) {
 
   const openManualEdit = (rec: any) => {
     setEditingRecord(rec);
-    setEditStatus(rec.status);
-    setEditCheckIn(rec.checkIn ? new Date(rec.checkIn).toISOString().slice(0, 16) : '');
-    setEditCheckOut(rec.checkOut ? new Date(rec.checkOut).toISOString().slice(0, 16) : '');
+    setEditStatus(rec.status === 'NOT_CHECKED_IN' ? 'PRESENT' : rec.status);
+    setEditCheckIn(toLocalDateTimeInput(rec.checkIn));
+    setEditCheckOut(toLocalDateTimeInput(rec.checkOut));
+    setEditIsLate(Boolean(rec.isLate || (rec.lateMinutes && rec.lateMinutes > 0)));
+    setEditLateMinutes(String(rec.lateMinutes || 0));
     setEditReason('');
   };
 
@@ -103,9 +108,13 @@ export default function AdminAttendanceClient({ initialRecords = [] }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           attendanceId: editingRecord._id,
+          employeeId: editingRecord.employeeId,
+          date: editingRecord.date,
           status: editStatus,
           checkIn: editCheckIn ? new Date(editCheckIn).toISOString() : null,
           checkOut: editCheckOut ? new Date(editCheckOut).toISOString() : null,
+          isLate: editIsLate,
+          lateMinutes: editIsLate ? Math.max(0, Number(editLateMinutes) || 0) : 0,
           reason: editReason,
         }),
       });
@@ -211,6 +220,13 @@ export default function AdminAttendanceClient({ initialRecords = [] }: Props) {
               Review real-time shifts, track late check-in records, process corrections, and manage attendance audits.
             </p>
           </div>
+          <Link
+            href="/admin/operations-calendar?layer=ATTENDANCE"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:border-rose-500/40 hover:text-rose-600 dark:hover:text-rose-400 shadow-sm transition self-start sm:self-auto"
+          >
+            <Calendar className="w-3.5 h-3.5" />
+            Common Calendar
+          </Link>
         </div>
 
         {/* Attendance & Punctuality KPI Quick Stats */}
@@ -586,6 +602,37 @@ export default function AdminAttendanceClient({ initialRecords = [] }: Props) {
                   onChange={(e) => setEditCheckOut(e.target.value)}
                   className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100"
                 />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-900/50">
+                <label className="flex items-center gap-2.5 text-xs font-semibold text-slate-800 dark:text-slate-200 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editIsLate}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setEditIsLate(checked);
+                      if (!checked) setEditLateMinutes('0');
+                      else if (Number(editLateMinutes) <= 0) setEditLateMinutes('15');
+                    }}
+                    className="w-4 h-4 rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                  />
+                  Mark as Late Check-In
+                </label>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-1">
+                    Late Minutes
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={720}
+                    disabled={!editIsLate}
+                    value={editIsLate ? editLateMinutes : '0'}
+                    onChange={(e) => setEditLateMinutes(e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-100 disabled:opacity-50"
+                  />
+                </div>
               </div>
 
               <div>

@@ -10,8 +10,10 @@ import {
     sendAdminRecordedLeaveEmail,
     sendLeaveUpdatedEmail,
     sendLeaveDeletedEmail,
+    sendLeaveCancelledEmails,
     getRequestClientUrl,
 } from '../services/email.js';
+import { resolveStakeholders } from '../services/stakeholders.js';
 import { logAuditEvent } from '../services/audit.js';
 import { calculateEmployeeLeaveBalances } from '../services/leave-accrual-engine.js';
 
@@ -247,18 +249,25 @@ router.post('/', async (req, res) => {
             }
 
             try {
-                await sendAdminRecordedLeaveEmail({
-                    leave,
-                    employeeEmail: targetEmployeeEmail,
-                    employeeName: targetEmployeeName,
-                    adminName: actorName,
-                    clientUrl: getRequestClientUrl(req),
+                const stakeholders = await resolveStakeholders({
+                    employeeId: targetEmployeeId,
+                    category: 'LEAVE',
                 });
+                if (stakeholders.enabled) {
+                    await sendAdminRecordedLeaveEmail({
+                        leave,
+                        employeeEmail: stakeholders.employee?.email || targetEmployeeEmail,
+                        employeeName: targetEmployeeName,
+                        adminName: actorName,
+                        managerEmails: stakeholders.managementEmails,
+                        clientUrl: getRequestClientUrl(req),
+                    });
+                }
             } catch (emailErr) {
                 console.warn('[EmailNotification:LeaveCreate] Non-fatal email error:', emailErr);
             }
         } else {
-            // Self-application -> notify admins and email both employee & admins
+            // Self-application -> notify admins/managers/TL and email both employee & management
             try {
                 await notifyLeaveApplication({ leave, employeeName: targetEmployeeName });
             } catch (pushErr) {
@@ -266,19 +275,21 @@ router.post('/', async (req, res) => {
             }
 
             try {
-                const adminUsers = await User.find({
-                    role: { $in: ['ADMIN', 'SUPER_ADMIN'] },
-                    status: 'ACTIVE',
-                }).select('email').lean();
-                const adminEmails = adminUsers.map((a) => a.email).filter(Boolean);
-
-                await sendLeaveApplicationEmails({
-                    leave,
-                    employeeEmail: targetEmployeeEmail,
-                    employeeName: targetEmployeeName,
-                    adminEmails,
-                    clientUrl: getRequestClientUrl(req),
+                const stakeholders = await resolveStakeholders({
+                    employeeId: targetEmployeeId,
+                    includeAdmins: true,
+                    category: 'LEAVE',
                 });
+                if (stakeholders.enabled) {
+                    await sendLeaveApplicationEmails({
+                        leave,
+                        employeeEmail: stakeholders.employee?.email || targetEmployeeEmail,
+                        employeeName: targetEmployeeName,
+                        adminEmails: stakeholders.admins.map((a) => a.email),
+                        managerEmails: stakeholders.managersAndLeads.map((m) => m.email),
+                        clientUrl: getRequestClientUrl(req),
+                    });
+                }
             } catch (emailErr) {
                 console.warn('[EmailNotification:Leave] Non-fatal email error:', emailErr);
             }
@@ -449,23 +460,32 @@ const handleUpdateLeave = async (req, res) => {
             if (!targetUser) {
                 targetUser = await resolveEmployeeUser(updated.employeeId);
             }
-            if (isPureDecision) {
-                await sendLeaveDecisionEmail({
-                    leave: updated,
-                    employeeEmail: targetUser?.email,
-                    employeeName: updated.employeeName,
-                    reviewerName: actorName,
-                    clientUrl: getRequestClientUrl(req),
-                });
-            } else {
-                await sendLeaveUpdatedEmail({
-                    leave: updated,
-                    employeeEmail: targetUser?.email,
-                    employeeName: updated.employeeName,
-                    adminName: actorName,
-                    changesSummary,
-                    clientUrl: getRequestClientUrl(req),
-                });
+            const stakeholders = await resolveStakeholders({
+                employeeId: updated.employeeId,
+                category: 'LEAVE',
+            });
+            if (stakeholders.enabled) {
+                const empEmail = stakeholders.employee?.email || targetUser?.email;
+                if (isPureDecision) {
+                    await sendLeaveDecisionEmail({
+                        leave: updated,
+                        employeeEmail: empEmail,
+                        employeeName: updated.employeeName,
+                        reviewerName: actorName,
+                        managerEmails: stakeholders.managementEmails,
+                        clientUrl: getRequestClientUrl(req),
+                    });
+                } else {
+                    await sendLeaveUpdatedEmail({
+                        leave: updated,
+                        employeeEmail: empEmail,
+                        employeeName: updated.employeeName,
+                        adminName: actorName,
+                        changesSummary,
+                        managerEmails: stakeholders.managementEmails,
+                        clientUrl: getRequestClientUrl(req),
+                    });
+                }
             }
         } catch (emailErr) {
             console.warn('[EmailNotification:LeaveUpdate] Non-fatal email error:', emailErr);
@@ -549,14 +569,21 @@ const handleDeleteLeave = async (req, res) => {
 
         try {
             const empUser = await resolveEmployeeUser(existing.employeeId);
-            await sendLeaveDeletedEmail({
-                leave: existing,
-                employeeEmail: empUser?.email,
-                employeeName: existing.employeeName || empUser?.name,
-                adminName: actorName,
-                deletionReason,
-                clientUrl: getRequestClientUrl(req),
+            const stakeholders = await resolveStakeholders({
+                employeeId: existing.employeeId,
+                category: 'LEAVE',
             });
+            if (stakeholders.enabled) {
+                await sendLeaveDeletedEmail({
+                    leave: existing,
+                    employeeEmail: stakeholders.employee?.email || empUser?.email,
+                    employeeName: existing.employeeName || empUser?.name,
+                    adminName: actorName,
+                    deletionReason,
+                    managerEmails: stakeholders.managementEmails,
+                    clientUrl: getRequestClientUrl(req),
+                });
+            }
         } catch (emailErr) {
             console.warn('[EmailNotification:LeaveDelete] Non-fatal email error:', emailErr);
         }
@@ -618,6 +645,27 @@ const handleSelfCancelLeave = async (req, res) => {
             },
             ipAddress: req.ip,
         });
+
+        try {
+            const empUser = await resolveEmployeeUser(existing.employeeId);
+            const stakeholders = await resolveStakeholders({
+                employeeId: existing.employeeId,
+                includeAdmins: true,
+                category: 'LEAVE',
+            });
+            if (stakeholders.enabled) {
+                await sendLeaveCancelledEmails({
+                    leave: existing,
+                    employeeEmail: stakeholders.employee?.email || empUser?.email,
+                    employeeName: existing.employeeName || empUser?.name,
+                    cancelReason: req.body?.reason || '',
+                    managerEmails: stakeholders.managementEmails,
+                    clientUrl: getRequestClientUrl(req),
+                });
+            }
+        } catch (emailErr) {
+            console.warn('[EmailNotification:LeaveCancel] Non-fatal email error:', emailErr);
+        }
 
         return res.json({
             success: true,

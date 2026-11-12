@@ -418,3 +418,102 @@ export async function checkOut(employeeId, location) {
         attendance,
     };
 }
+
+/**
+ * Compute normalized attendance field updates for admin manual corrections/creations.
+ * Supports explicit admin overrides for checkIn, checkOut, isLate, lateMinutes, and status
+ * while recalculating working minutes and preserving shift metadata.
+ */
+export function computeAdminAttendancePatch({
+    existing = null,
+    status,
+    checkIn,
+    checkOut,
+    isLate,
+    lateMinutes,
+    shiftCfg = { shiftStartTime: '09:30', graceMinutes: 15 },
+}) {
+    const base = existing || {
+        status: 'NOT_CHECKED_IN',
+        checkIn: null,
+        checkOut: null,
+        totalBreakMinutes: 0,
+        isLate: false,
+        lateMinutes: 0,
+        scheduledShiftStart: shiftCfg.shiftStartTime || '09:30',
+        lateGraceMinutes: shiftCfg.graceMinutes ?? 15,
+    };
+
+    const parseOptionalDate = (val, fallback, label) => {
+        if (val === undefined) return fallback ? new Date(fallback) : null;
+        if (val === null || val === '') return null;
+        const d = new Date(val);
+        if (isNaN(d.getTime())) {
+            throw new Error(`Invalid ${label} timestamp`);
+        }
+        return d;
+    };
+
+    const nextCheckIn = parseOptionalDate(checkIn, base.checkIn, 'check-in');
+    const nextCheckOut = parseOptionalDate(checkOut, base.checkOut, 'check-out');
+
+    if (nextCheckIn && nextCheckOut && nextCheckOut.getTime() < nextCheckIn.getTime()) {
+        throw new Error('Check-out time cannot be earlier than check-in time');
+    }
+
+    const lateCalc = nextCheckIn
+        ? calculateLateCheckIn(nextCheckIn, shiftCfg.shiftStartTime, shiftCfg.graceMinutes)
+        : {
+            isLate: false,
+            lateMinutes: 0,
+            scheduledShiftStart: shiftCfg.shiftStartTime || base.scheduledShiftStart || '09:30',
+            lateGraceMinutes: shiftCfg.graceMinutes ?? base.lateGraceMinutes ?? 15,
+        };
+
+    let nextIsLate = Boolean(base.isLate);
+    let nextLateMinutes = Number(base.lateMinutes) || 0;
+
+    if (isLate !== undefined) {
+        nextIsLate = Boolean(isLate);
+        if (!nextIsLate) {
+            nextLateMinutes = 0;
+        } else if (lateMinutes !== undefined && lateMinutes !== '' && lateMinutes !== null) {
+            nextLateMinutes = Math.max(0, Math.round(Number(lateMinutes) || 0));
+        } else if (lateCalc.lateMinutes > 0) {
+            nextLateMinutes = lateCalc.lateMinutes;
+        } else if (base.lateMinutes > 0) {
+            nextLateMinutes = base.lateMinutes;
+        } else {
+            nextLateMinutes = 1;
+        }
+    } else if (lateMinutes !== undefined && lateMinutes !== '' && lateMinutes !== null) {
+        nextLateMinutes = Math.max(0, Math.round(Number(lateMinutes) || 0));
+        nextIsLate = nextLateMinutes > 0;
+    } else if (checkIn !== undefined) {
+        nextIsLate = lateCalc.isLate;
+        nextLateMinutes = lateCalc.lateMinutes;
+    }
+
+    const nextTotalWorkingMinutes =
+        nextCheckIn && nextCheckOut
+            ? calculateWorkingMinutes(nextCheckIn, nextCheckOut, Number(base.totalBreakMinutes) || 0)
+            : 0;
+
+    let nextStatus = status || base.status;
+    if (!status && (!existing || base.status === 'NOT_CHECKED_IN')) {
+        if (nextCheckIn && nextCheckOut) nextStatus = 'COMPLETED';
+        else if (nextCheckIn) nextStatus = 'PRESENT';
+        else nextStatus = 'ABSENT';
+    }
+
+    return {
+        status: nextStatus,
+        checkIn: nextCheckIn,
+        checkOut: nextCheckOut,
+        isLate: nextIsLate,
+        lateMinutes: nextLateMinutes,
+        scheduledShiftStart: lateCalc.scheduledShiftStart,
+        lateGraceMinutes: lateCalc.lateGraceMinutes,
+        totalWorkingMinutes: nextTotalWorkingMinutes,
+    };
+}

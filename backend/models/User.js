@@ -64,6 +64,28 @@ const UserSchema = new Schema({
         type: Boolean,
         default: true,
     },
+    reportingManagerId: {
+        type: Schema.Types.ObjectId,
+        ref: 'User',
+        default: null,
+    },
+    teamLeadId: {
+        type: Schema.Types.ObjectId,
+        ref: 'User',
+        default: null,
+    },
+    emailNotifications: {
+        type: Boolean,
+        default: true,
+    },
+    taskAlerts: {
+        type: Boolean,
+        default: true,
+    },
+    payslipAlerts: {
+        type: Boolean,
+        default: true,
+    },
 }, {
     timestamps: true,
 });
